@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+from pathlib import Path
+
+from setuptools import setup
+from setuptools.command.build_py import build_py as _build_py
+
+try:
+    from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
+except ImportError:  # pragma: no cover - wheel is a build dependency
+    _bdist_wheel = None
+
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from pyfmi_distributed.native import (  # noqa: E402
+    default_runtime_library_path,
+    runtime_library_name,
+)
+
+
+class build_py(_build_py):
+    """Bundle the native runtime and its headers into the wheel."""
+
+    def run(self) -> None:
+        super().run()
+        self._bundle_runtime()
+
+    def _bundle_runtime(self) -> None:
+        source = default_runtime_library_path(ROOT)
+        if not source.is_file():
+            if os.environ.get("PYFMI_DIST_ALLOW_MISSING_RUNTIME") == "1":
+                return
+            raise FileNotFoundError(
+                f"native runtime not found: {source}. "
+                "Run 'cmake -S . -B build && cmake --build build' before "
+                "building the wheel, or set PYFMI_DIST_ALLOW_MISSING_RUNTIME=1 "
+                "for a source-only install."
+            )
+
+        destination_dir = Path(self.build_lib) / "pyfmi_distributed" / "_runtime"
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination_dir / runtime_library_name())
+
+        headers_source = ROOT / "runtime" / "include"
+        headers_target = destination_dir / "include"
+        if headers_target.exists():
+            shutil.rmtree(headers_target)
+        shutil.copytree(headers_source, headers_target)
+
+        cmake_source = ROOT / "cmake" / "adapters.cmake"
+        if not cmake_source.is_file():
+            raise FileNotFoundError(f"CMake adapter module not found: {cmake_source}")
+        cmake_target = destination_dir / "cmake" / "adapters.cmake"
+        cmake_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(cmake_source, cmake_target)
+
+
+if _bdist_wheel is not None:
+
+    class bdist_wheel(_bdist_wheel):
+        def finalize_options(self) -> None:
+            super().finalize_options()
+            self.root_is_pure = False
+
+        def get_tag(self) -> tuple[str, str, str]:
+            _, _, platform_tag = super().get_tag()
+            return "py3", "none", platform_tag
+
+
+cmdclass = {"build_py": build_py}
+if _bdist_wheel is not None:
+    cmdclass["bdist_wheel"] = bdist_wheel
+
+
+setup(cmdclass=cmdclass)

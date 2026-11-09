@@ -1,0 +1,9 @@
+[submodule "third_party/OpenRTI"]
+	path = third_party/OpenRTI
+	url = https://github.com/onox/OpenRTI.git
+[submodule "third_party/DCPLib"]
+	path = third_party/DCPLib
+	url = https://github.com/modelica/DCPLib.git
+[submodule "third_party/ED247_LIBRARY"]
+	path = third_party/ED247_LIBRARY
+	url = https://github.com/airbus/ED247_LIBRARY.git

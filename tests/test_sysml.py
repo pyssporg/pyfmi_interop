@@ -1,0 +1,206 @@
+"""SysML ingestion: attribute normalization and architecture-to-IR mapping."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from pyfmi_distributed import ir, sysml
+
+pytestmark = pytest.mark.unit
+
+
+class _Attribute:
+    """Minimal stand-in for :class:`pycps_sysml2.Attribute`."""
+
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+
+def test_step_size_attributes_and_explicit_override() -> None:
+    assert sysml._step_size_from_attributes({}, None) == sysml.DEFAULT_STEP_SIZE_S
+    assert sysml._step_size_from_attributes({"step_size": _Attribute(0.01)}, None) == 0.01
+    assert sysml._step_size_from_attributes({"step_size_s": 0.02}, None) == 0.02
+    assert sysml._step_size_from_attributes({"period_s": 0.005}, None) == 0.005
+    assert sysml._step_size_from_attributes({"rate_hz": 2000}, None) == 0.0005
+    assert sysml._step_size_from_attributes({"rate": 1000}, None) == 0.001
+    assert sysml._step_size_from_attributes({"pyssp_rate": 1000}, None) == 0.001
+    assert sysml._step_size_from_attributes(
+        {"pyssp_step_size": 0.25, "step_size": 0.5}, None
+    ) == 0.25
+    assert sysml._step_size_from_attributes({"step_size": 0.1}, 0.02) == 0.02
+
+
+def test_period_key_is_seconds_at_or_below_one_and_hz_above_one() -> None:
+    assert sysml._period_seconds_from_attributes({"period": 0.5}) == 0.5
+    assert sysml._period_seconds_from_attributes({"period": 1.0}) == 1.0
+    assert sysml._period_seconds_from_attributes({"period": 10.0}) == 0.1
+
+
+def test_rate_attributes_cover_seconds_and_hertz_forms() -> None:
+    assert sysml._rate_hz_from_attributes({}) is None
+    assert sysml._rate_hz_from_attributes({"rate_hz": 10}) == 10.0
+    assert sysml._rate_hz_from_attributes({"rate": 25}) == 25.0
+    assert sysml._rate_hz_from_attributes({"period_s": 0.1}) == 10.0
+    assert sysml._rate_hz_from_attributes({"period": 100}) == 100.0
+    assert sysml._rate_hz_from_attributes({"step_size": 0.2}) == 5.0
+
+
+@pytest.mark.parametrize("value", [0, -1, "not-a-number", True])
+def test_invalid_timing_values_are_rejected(value: object) -> None:
+    with pytest.raises(ValueError):
+        sysml._step_size_from_attributes({"step_size": value}, None)
+
+
+def test_data_type_and_direction_mapping() -> None:
+    assert sysml._data_type("Real") is ir.DataType.REAL
+    assert sysml._data_type("integer") is ir.DataType.INTEGER
+    assert sysml._data_type("Boolean") is ir.DataType.BOOLEAN
+    assert sysml._data_type("String") is ir.DataType.STRING
+    with pytest.raises(ValueError, match="unsupported FMI data type"):
+        sysml._data_type("Complex")
+
+    assert sysml._direction("input") is ir.Direction.INPUT
+    assert sysml._direction("output") is ir.Direction.OUTPUT
+    assert sysml._direction("parameter") is ir.Direction.PARAMETER
+    with pytest.raises(ValueError, match="unsupported FMI causality"):
+        sysml._direction("inout")
+
+
+def test_string_signals_get_capacity_and_initial_value() -> None:
+    real = SimpleNamespace(
+        name="r", type_name="Real", causality="input", value_reference=7, start=1.5
+    )
+    string = SimpleNamespace(
+        name="s", type_name="String", causality="output", value_reference=8, start="ok"
+    )
+
+    real_signal = sysml._signal_from_variable(real, rate_hz=None, unit="V")
+    string_signal = sysml._signal_from_variable(string, rate_hz=10.0, unit=None)
+
+    assert real_signal.capacity == 0
+    assert real_signal.initial == 1.5
+    assert real_signal.unit == "V"
+    assert string_signal.data_type is ir.DataType.STRING
+    assert string_signal.capacity == sysml.DEFAULT_STRING_CAPACITY
+    assert string_signal.initial == "ok"
+    assert string_signal.rate_hz == 10.0
+
+
+def test_transport_binding_requires_transport_and_channel() -> None:
+    attributes = {
+        "transport": _Attribute("loopback"),
+        "channel": _Attribute("telemetry"),
+        "transport_endpoint": _Attribute("udp://239.0.0.1:5000"),
+    }
+
+    binding = sysml._binding_for_signal("sig", ir.Direction.OUTPUT, attributes)
+
+    assert binding is not None
+    assert binding.transport == "loopback"
+    assert binding.channel == "telemetry"
+    assert binding.direction is ir.Direction.OUTPUT
+    assert binding.config == {"endpoint": "udp://239.0.0.1:5000"}
+
+    assert sysml._binding_for_signal("sig", ir.Direction.INPUT, {"transport": "loopback"}) is None
+    assert sysml._binding_for_signal("sig", ir.Direction.INPUT, {"channel": "c"}) is None
+
+
+def test_unknown_transport_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown adapter"):
+        sysml._binding_for_signal(
+            "sig",
+            ir.Direction.INPUT,
+            {"transport": "carrier-pigeon", "channel": "c"},
+        )
+
+
+def test_model_name_sanitization() -> None:
+    assert sysml._identifier("Demo") == "Demo"
+    assert sysml._identifier("Demo.Package") == "Demo_Package"
+    assert sysml._identifier("1Demo") == "_1Demo"
+    assert sysml._identifier("") == "model"
+
+
+def _architecture() -> object:
+    pycps = pytest.importorskip("pycps_sysml2")
+    try:
+        import pyfmi_sysml2  # noqa: F401
+    except Exception as error:  # noqa: BLE001 - broken optional dependency
+        pytest.skip(f"pyfmi_sysml2 is not importable: {error}")
+
+    telemetry = pycps.PortDefinition(
+        name="Telemetry",
+        attributes={
+            "value": pycps.Attribute(name="value", type_name="Real"),
+            "label": pycps.Attribute(name="label", type_name="String"),
+            "pyssp_unit": pycps.Attribute(
+                name="pyssp_unit", type_name="String", value="V"
+            ),
+            "pyssp_rate": pycps.Attribute(name="pyssp_rate", value=10.0),
+            "pyssp_step_size_s": pycps.Attribute(
+                name="pyssp_step_size_s", value=0.01
+            ),
+            "pyssp_transport": pycps.Attribute(
+                name="pyssp_transport", type_name="String", value="loopback"
+            ),
+            "pyssp_channel": pycps.Attribute(
+                name="pyssp_channel", type_name="String", value="telemetry"
+            ),
+            "pyssp_transport_endpoint": pycps.Attribute(
+                name="pyssp_transport_endpoint",
+                type_name="String",
+                value="udp://239.0.0.1:5000",
+            ),
+        },
+    )
+    plant = pycps.PartDefinition(
+        name="Plant",
+        ports={"out": pycps.PortUsage(name="out", direction="out", type_name="Telemetry")},
+    )
+    root = pycps.PartDefinition(
+        name="Demo",
+        parts={"plant": pycps.PartUsage(name="plant", type_name="Plant")},
+    )
+
+    architecture = pycps.Architecture(package_name="Demo")
+    architecture.add_part_def(root)
+    architecture.add_part_def(plant)
+    architecture.add_port_def(telemetry)
+    return architecture
+
+
+def test_model_from_architecture_maps_signals_rates_units_and_bindings() -> None:
+    model = sysml.model_from_architecture(_architecture())
+
+    assert model.name == "Demo"
+    assert model.guid == ir.deterministic_guid("Demo")
+    assert model.step_size_s == pytest.approx(0.01)
+    assert [signal.name for signal in model.signals] == ["out.label", "out.value"]
+    assert [signal.value_reference for signal in model.signals] == [0, 1]
+
+    label, value = model.signals
+    assert label.data_type is ir.DataType.STRING
+    assert label.capacity == sysml.DEFAULT_STRING_CAPACITY
+    assert value.data_type is ir.DataType.REAL
+    assert value.capacity == 0
+    assert value.direction is ir.Direction.OUTPUT
+    assert value.rate_hz == pytest.approx(10.0)
+    assert value.unit == "V"
+
+    assert [binding.signal for binding in model.bindings] == ["out.label", "out.value"]
+    for binding in model.bindings:
+        assert binding.transport == "loopback"
+        assert binding.channel == "telemetry"
+        assert binding.config == {"endpoint": "udp://239.0.0.1:5000"}
+
+
+def test_model_from_architecture_honours_explicit_step_size_and_name() -> None:
+    model = sysml.model_from_architecture(
+        _architecture(), name="Renamed", step_size_s=0.02, realtime=False
+    )
+
+    assert model.name == "Renamed"
+    assert model.step_size_s == pytest.approx(0.02)
+    assert model.realtime is False

@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyfmi-distributed"
+dynamic = ["version"]
+description = "Turn SysML v2 FMU definitions into C++ realtime runtimes with HLA, DIS, DCP, ROS 2 and ED-247 transport adapters."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "pyssp contributors" }
+]
+keywords = [
+  "fmi",
+  "fmu",
+  "sysml-v2",
+  "realtime",
+  "hla",
+  "dis",
+  "dcp",
+  "ros2",
+  "ed247",
+  "co-simulation",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Simulation",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# SysML ingestion is optional so the runtime/codegen path can be installed and
+# tested without the SysML dialect packages.  Inside the pyssp workspace these
+# are installed editable from checks, not resolved from this list.
+sysml = [
+  "pycps-sysml2",
+  "pyfmi-sysml2",
+]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+  "build",
+]
+
+[project.scripts]
+pyfmi-distributed = "pyfmi_distributed.cli:main"
+
+[project.urls]
+Documentation = "https://github.com/pyssporg/pyfmi_distributed/tree/main/docs"
+Source = "https://github.com/pyssporg/pyfmi_distributed"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.package-data]
+pyfmi_distributed = [
+  "codegen/templates/*.in",
+  "_runtime/*.a",
+  "_runtime/*.lib",
+  "_runtime/include/**/*.hpp",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "pyfmi_distributed.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pyfmi_distributed*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Lint selection is explicit so a ruff upgrade cannot change the gate.
+select = ["E", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+  "static: inspects source or files without executing the package",
+  "unit: one object's behaviour, no generated artifact",
+  "component: a generated artifact is the unit under test",
+  "contract: two directions must agree (IR round-trip, generated/runtime ABI)",
+  "system: the CLI and the native build are driven end to end",
+  "cpp: requires a working C++ toolchain and CMake",
+  "slow: not part of the default CI subset",
+]

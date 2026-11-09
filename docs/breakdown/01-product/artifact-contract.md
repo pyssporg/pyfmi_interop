@@ -1,0 +1,28 @@
+---
+id: CP-001
+type: capability
+title: Artifact contract
+summary: A packaged model is a deterministic FMI 2.0 CoSimulation FMU carrying one generated realtime binary and the IR's variable set.
+date: 2026-11-09
+status: current
+---
+
+# Artifact contract
+
+A packaged model is a valid FMI 2.0 CoSimulation FMU with deterministic bytes
+and one generated realtime binary.
+
+- **Archive layout:** `modelDescription.xml` at the zip root; the built shared
+  library under `binaries/<platform>/`.
+- **Model identifier:** the FMI `modelIdentifier` equals the generated model
+  name and the binary stem in the archive.
+- **Variables:** every `ScalarVariable` has a unique name and a unique value
+  reference taken from the IR (`INFO-003`).
+- **Identity:** the GUID is the stable uuid5 derived from the model name
+  (`INFO-003`).
+- **Resources:** canonical `model.json`, `runtime.json`, and `adapters.json`
+  under `resources/`, so the archive is self-describing.
+- **Determinism:** packaging sorts entries, fixes file modes and timestamps to
+  a constant, and emits byte-identical archives for equal inputs.
+- **Validity:** the document has one `CoSimulation` element and declares its
+  outputs index-ordered in `ModelStructure` before the archive is written.

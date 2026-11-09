@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+*.fmu
+.venv/
+
+# CMake artifacts outside the build directory
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+*.ninja
+.ninja_deps
+.ninja_log
+
+# Native build products
+*.o
+*.a
+*.so
+*.dylib
+*.lib
+*.dll
+
+vcpkg_installed/

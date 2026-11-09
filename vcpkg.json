@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "pyfmi-distributed",
+  "version-string": "0.1.0",
+  "description": "Realtime FMI runtime and protocol adapters generated from SysML v2.",
+  "homepage": "https://github.com/pyssporg/pyfmi_distributed",
+  "license": "MIT",
+  "builtin-baseline": "296b89248ad13be09e9324488eb4f74dd322d26c",
+  "features": {
+    "hla": {
+      "description": "IEEE 1516 HLA adapter (OpenRTI is fetched, not a vcpkg port)"
+    },
+    "dis": {
+      "description": "IEEE 1278 DIS adapter (open-dis-cpp)",
+      "dependencies": [
+        "open-dis-cpp"
+      ]
+    },
+    "dcp": {
+      "description": "ASAM X-DCP adapter (DCPLib is fetched; its dependencies come from vcpkg)",
+      "dependencies": [
+        "asio",
+        "xerces-c",
+        "libzip"
+      ]
+    },
+    "ros2": {
+      "description": "ROS 2 adapter (consumed from a system Jazzy installation, not from vcpkg)"
+    },
+    "ed247": {
+      "description": "ED-247 adapter (Airbus ED247_LIBRARY is fetched; LibXml2 comes from vcpkg)",
+      "dependencies": [
+        "libxml2"
+      ]
+    }
+  }
+}
