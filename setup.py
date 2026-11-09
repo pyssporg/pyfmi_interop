@@ -33,7 +33,12 @@ class build_py(_build_py):
     def _bundle_runtime(self) -> None:
         source = default_runtime_library_path(ROOT)
         if not source.is_file():
-            if os.environ.get("PYFMI_DIST_ALLOW_MISSING_RUNTIME") == "1":
+            # An editable install is used while developing; the runtime is built
+            # separately and found through native.runtime_search_paths().  A
+            # wheel, however, must never ship without the native archive.
+            if getattr(self, "editable_mode", False) or os.environ.get(
+                "PYFMI_DIST_ALLOW_MISSING_RUNTIME"
+            ) == "1":
                 return
             raise FileNotFoundError(
                 f"native runtime not found: {source}. "

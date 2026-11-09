@@ -58,13 +58,16 @@ jobs:
           with zipfile.ZipFile(wheel) as zf:
               assert zf.testzip() is None
               names = zf.namelist()
-              assert (
-                  "pyfmi_distributed/_runtime/libpyfmi_distributed_runtime.a"
-                  in names
+              # A platform wheel installs package files under
+              # <dist>.data/purelib/; accept either layout.
+              assert any(
+                  name.endswith(
+                      "pyfmi_distributed/_runtime/libpyfmi_distributed_runtime.a"
+                  )
+                  for name in names
               ), "native runtime missing from the wheel"
               assert any(
-                  name.startswith("pyfmi_distributed/_runtime/include/")
-                  and name.endswith(".hpp")
+                  "_runtime/include/" in name and name.endswith(".hpp")
                   for name in names
               ), "runtime headers missing from the wheel"
               metadata = next(
