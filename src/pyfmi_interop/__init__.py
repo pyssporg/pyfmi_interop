@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from . import adapters, builder, codegen, ir, native, packaging, wire
+from . import adapters, builder, codegen, ir, native, packaging, schema, wire
 from .adapters import (
     ADAPTERS,
     AdapterDescriptor,
@@ -45,6 +45,13 @@ from .ir import (
     write_model_json,
 )
 from .packaging import package_fmu
+from .schema import (
+    build_schema,
+    render_proto,
+    render_wire_json,
+    schema_entries,
+    write_schema,
+)
 from .wire import (
     HEADER_SIZE,
     WIRE_VERSION,
@@ -104,6 +111,7 @@ __all__ = [
     "assign_value_references",
     "available_adapters",
     "build_model",
+    "build_schema",
     "builder",
     "codegen",
     "decode",
@@ -120,11 +128,16 @@ __all__ = [
     "native",
     "package_fmu",
     "packaging",
+    "render_proto",
+    "render_wire_json",
     "require_adapter",
+    "schema",
+    "schema_entries",
     "sysml",
     "timing",
     "wire",
     "write_model_json",
+    "write_schema",
 ]
 
 

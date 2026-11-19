@@ -18,6 +18,7 @@ from .builder import build_model
 from .codegen import generate_model
 from .ir import ModelDefinition, model_from_dict
 from .packaging import package_fmu
+from .schema import write_schema
 
 __all__ = ["build_parser", "main"]
 
@@ -83,6 +84,13 @@ def build_parser() -> argparse.ArgumentParser:
     package_parser.add_argument("--library", type=Path, required=True)
     package_parser.add_argument("--out", type=Path, required=True)
 
+    schema_parser = subparsers.add_parser(
+        "schema",
+        help="Emit the wire schema bundle for a model.json IR file.",
+    )
+    schema_parser.add_argument("--model-json", type=Path, required=True)
+    schema_parser.add_argument("--out", type=Path, required=True)
+
     return parser
 
 
@@ -120,6 +128,13 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if args.command == "package":
         destination = package_fmu(args.model_dir, args.library, args.out)
         print(f"Packaged {destination}")
+        return 0
+    if args.command == "schema":
+        proto_path, descriptor_path = write_schema(
+            _load_model_json(args.model_json), args.out
+        )
+        print(f"Schema proto at {proto_path}")
+        print(f"Schema descriptor at {descriptor_path}")
         return 0
     parser.error(f"unsupported command: {args.command}")
     return 2

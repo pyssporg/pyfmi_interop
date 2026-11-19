@@ -176,8 +176,25 @@ def test_build_rejects_unknown_adapter(monkeypatch, tmp_path, capsys):
     assert "unknown adapter" in capsys.readouterr().err
 
 
+def test_schema_command_writes_both_artifacts(tmp_path, capsys):
+    path = write_fixture(tmp_path)
+    out_dir = tmp_path / "schema"
+
+    assert cli.main(["schema", "--model-json", str(path), "--out", str(out_dir)]) == 0
+    output = capsys.readouterr().out
+
+    proto_path = out_dir / "demo_model.proto"
+    descriptor_path = out_dir / "wire.json"
+    assert proto_path.is_file()
+    assert descriptor_path.is_file()
+    assert f"Schema proto at {proto_path}" in output
+    assert f"Schema descriptor at {descriptor_path}" in output
+    assert "package pyfmi_interop.wire;" in proto_path.read_text(encoding="utf-8")
+    assert '"model": "demo_model"' in descriptor_path.read_text(encoding="utf-8")
+
+
 def test_help_lists_the_commands():
     help_text = cli.build_parser().format_help()
 
-    for command in ("adapters", "inspect", "generate", "build", "package"):
+    for command in ("adapters", "inspect", "generate", "build", "package", "schema"):
         assert command in help_text

@@ -61,6 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an opaque protobuf payload. `encode`/`decode`/`model_id` with a typed
   `WireError` taxonomy, documented byte layout and golden frames in
   `docs/wire.md`.
+- Schema bundle shipped inside every packaged FMU: `<Model>.proto` (proto3,
+  payload fields numbered by IR `value_reference`) and `wire.json` (format
+  version, model id, step size, signals, rate groups), both deterministic and
+  emitted next to the binary. The `schema` CLI verb writes the bundle from a
+  `model.json`; `ProjectionError` fails packaging instead of dropping a signal.
 
 ### Changed
 

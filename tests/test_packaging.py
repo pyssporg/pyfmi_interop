@@ -13,6 +13,7 @@ from pyfmi_interop.ir import (
     DataType,
     Direction,
     ModelDefinition,
+    ProjectionError,
     RateGroup,
     Signal,
     TransportBinding,
@@ -23,6 +24,7 @@ from pyfmi_interop.packaging import (
     platform_binary_dir,
     platform_library_extension,
 )
+from pyfmi_interop.schema import render_proto, render_wire_json
 
 
 def make_model() -> ModelDefinition:
@@ -72,9 +74,43 @@ def test_archive_layout_is_sorted_and_self_describing(tmp_path):
         "resources/model.json",
         "resources/runtime.json",
         expected_binary,
+        f"binaries/{platform_binary_dir()}/demo_model.proto",
+        f"binaries/{platform_binary_dir()}/wire.json",
     }
     assert expected_binary.startswith("binaries/")
     assert expected_binary.endswith(platform_library_extension())
+
+
+def test_schema_bundle_lands_next_to_the_binary(tmp_path):
+    model = make_model()
+    model_dir, destination = package_fixture(tmp_path)
+    platform = platform_binary_dir()
+
+    with ZipFile(destination) as archive:
+        proto = archive.read(f"binaries/{platform}/demo_model.proto").decode("utf-8")
+        descriptor = archive.read(f"binaries/{platform}/wire.json").decode("utf-8")
+
+    assert proto == render_proto(model)
+    assert descriptor == render_wire_json(model)
+    assert (model_dir / "model.json").is_file()
+
+
+def test_non_projectable_signal_fails_packaging_without_writing_a_fmu(tmp_path):
+    model = ModelDefinition(
+        name="bad_model",
+        guid=deterministic_guid("bad_model"),
+        step_size_s=0.01,
+        signals=(Signal("bad-name", 1, DataType.REAL, Direction.OUTPUT),),
+    )
+    model_dir = tmp_path / "gen"
+    model_dir.mkdir()
+    library = tmp_path / "libbad_model.so"
+    library.write_bytes(b"fake")
+    destination = tmp_path / "bad.fmu"
+
+    with pytest.raises(ProjectionError):
+        package_fmu(model_dir, library, destination, model=model)
+    assert not destination.exists()
 
 
 def test_packaging_is_byte_deterministic(tmp_path):

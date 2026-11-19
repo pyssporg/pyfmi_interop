@@ -25,6 +25,7 @@ from .ir import (
     model_from_dict,
     model_to_dict,
 )
+from .schema import schema_entries
 
 __all__ = [
     "package_fmu",
@@ -86,6 +87,9 @@ def package_fmu(
         "resources/adapters.json": _adapters_json(),
         binary_arcname: binary.read_bytes(),
     }
+    # The schema travels with the binary: a third-party decoder needs only the
+    # packaged artifacts, never this Python package.
+    entries.update(schema_entries(model, prefix=f"binaries/{platform_dir}"))
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(

@@ -137,7 +137,46 @@ Empty payload for the same model and header values:
 50464d4901003000ee78acea761957f0070000002a0000000000000000002a36fe9c971700000000000000001880f4c4
 ```
 
+## Schema bundle
+
+Every packaged FMU carries the payload schema next to its binary, under
+`binaries/<platform>/`:
+
+| Artifact | Purpose |
+| --- | --- |
+| `<Model>.proto` | proto3 payload schema; field numbers are the signal `value_reference` ids verbatim |
+| `wire.json` | JSON descriptor of the model, its derived model id, and every signal |
+
+The bundle is a pure projection of the IR. Both artifacts are emitted twice
+byte-identically: signals are ordered by `(value_reference, name)`, JSON keys
+are sorted, floats use the shortest round-tripping form, and neither artifact
+contains a timestamp or a filesystem path. `wire.json` records the schema
+format version, model name, GUID, model id as 16 hex characters (the same
+8-byte id the envelope carries), step size, `payload_message`, and
+`proto_package`, followed by the ordered `signals` list
+(`{id, name, data_type, direction, rate_hz, unit, capacity}`) and the
+`rate_groups` list.
+
+The `.proto` declares `package pyfmi_interop.wire;`, a shared `Value` message
+with a `oneof kind` (`double real`, `sint64 integer`, `bool boolean`,
+`bytes string`), and one payload message per model. Each payload field uses the
+signal's IR id as its field number, so ids are never renumbered and gaps stay
+gaps. The message reserves protobuf's internal range `19000 to 19999`; it does
+not reserve the gaps between used ids. Each field carries a comment with the
+signal name, type, direction, rate (base or Hz), unit (or `unspecified` /
+`dimensionless`), and string capacity in bytes.
+
+A third-party decoder needs only the packaged files: read `<Model>.proto` (or
+compile it once) to learn the payload message name and field numbers, then read
+`wire.json` to map each field id to its name, type, direction, rate, unit, and
+string capacity. No Python package, SysML model, or IR file is required. The
+`.proto` is a shipped artifact and is never regenerated during a build, so
+`protoc` is not a build dependency. A signal that cannot be projected (an
+illegal protobuf field identifier, a duplicate id, a non-finite number) raises
+`ProjectionError` during packaging; it is never silently dropped.
+
 ## C++ end (W6)
+
 
 To match Python byte for byte, the C++ implementation must use the same
 `<4sHH8sIQQII` field order and widths, little-endian integers, `crc32` with the
