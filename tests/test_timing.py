@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from pyfmi_distributed import ir, timing
+from pyfmi_interop import ir, timing
 
 pytestmark = pytest.mark.unit
 

@@ -1,9 +1,9 @@
-#include "pyfmi_distributed/runtime/loopback_transport.hpp"
+#include "pyfmi_interop/runtime/loopback_transport.hpp"
 
 #include <cstddef>
 #include <string>
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 namespace {
 
 void ensure_frame_size(Sample& sample, std::size_t signal_count) {
@@ -79,4 +79,4 @@ bool LoopbackTransport::receive(Sample& sample, std::string& error) {
     return true;
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

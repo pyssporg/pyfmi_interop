@@ -2,9 +2,9 @@
 
 #include <string>
 
-#include "pyfmi_distributed/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/transport.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 // ROS 2 adapter.  Compile-gated stub: see ros2.cpp.
 class Ros2Transport final : public Transport {
@@ -16,4 +16,4 @@ public:
     bool receive(Sample& sample, std::string& error) override;
 };
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

@@ -1,15 +1,15 @@
-#include "pyfmi_distributed/runtime/adapters/dis.hpp"
+#include "pyfmi_interop/runtime/adapters/dis.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 namespace {
 
 const char* unavailable_reason() {
-#if defined(PYFMI_DIST_ENABLE_DIS) && PYFMI_DIST_ENABLE_DIS
+#if defined(PYFMI_INTEROP_ENABLE_DIS) && PYFMI_INTEROP_ENABLE_DIS
     return "DIS SDK binding is not implemented yet; this build configured "
-           "PYFMI_DIST_ENABLE_DIS=ON but the runtime still contains only a stub";
+           "PYFMI_INTEROP_ENABLE_DIS=ON but the runtime still contains only a stub";
 #else
     return "DIS transport is not compiled in; rebuild with "
-           "-DPYFMI_DIST_ENABLE_DIS=ON to enable the IEEE 1278 UDP binding";
+           "-DPYFMI_INTEROP_ENABLE_DIS=ON to enable the IEEE 1278 UDP binding";
 #endif
 }
 
@@ -36,4 +36,4 @@ bool DisTransport::receive(Sample&, std::string& error) {
     return false;
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

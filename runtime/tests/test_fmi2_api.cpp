@@ -1,4 +1,4 @@
-#include "pyfmi_distributed/runtime/model_runtime.hpp"
+#include "pyfmi_interop/runtime/model_runtime.hpp"
 
 #include "fmi2Functions.h"
 
@@ -12,12 +12,12 @@
 
 namespace {
 
-using pyfmi_distributed::DataType;
-using pyfmi_distributed::Direction;
-using pyfmi_distributed::ModelRuntime;
-using pyfmi_distributed::Sample;
-using pyfmi_distributed::SignalDescriptor;
-using pyfmi_distributed::Value;
+using pyfmi_interop::DataType;
+using pyfmi_interop::Direction;
+using pyfmi_interop::ModelRuntime;
+using pyfmi_interop::Sample;
+using pyfmi_interop::SignalDescriptor;
+using pyfmi_interop::Value;
 
 std::string g_last_log;
 
@@ -38,29 +38,29 @@ int fail(const char* message) {
 
 void set_no_model(bool enabled) {
 #if defined(_WIN32)
-    _putenv_s("PYFMI_DIST_TEST_NO_MODEL", enabled ? "1" : "");
+    _putenv_s("PYFMI_INTEROP_TEST_NO_MODEL", enabled ? "1" : "");
 #else
     if (enabled) {
-        setenv("PYFMI_DIST_TEST_NO_MODEL", "1", 1);
+        setenv("PYFMI_INTEROP_TEST_NO_MODEL", "1", 1);
     } else {
-        unsetenv("PYFMI_DIST_TEST_NO_MODEL");
+        unsetenv("PYFMI_INTEROP_TEST_NO_MODEL");
     }
 #endif
 }
 
 void set_transport(const char* name) {
 #if defined(_WIN32)
-    _putenv_s("PYFMI_DIST_TRANSPORT", name != nullptr ? name : "");
-    _putenv_s("PYFMI_DIST_TRANSPORT_ENDPOINT", "");
-    _putenv_s("PYFMI_DIST_TRANSPORT_TIMEOUT_MS", "");
+    _putenv_s("PYFMI_INTEROP_TRANSPORT", name != nullptr ? name : "");
+    _putenv_s("PYFMI_INTEROP_TRANSPORT_ENDPOINT", "");
+    _putenv_s("PYFMI_INTEROP_TRANSPORT_TIMEOUT_MS", "");
 #else
     if (name != nullptr) {
-        setenv("PYFMI_DIST_TRANSPORT", name, 1);
+        setenv("PYFMI_INTEROP_TRANSPORT", name, 1);
     } else {
-        unsetenv("PYFMI_DIST_TRANSPORT");
+        unsetenv("PYFMI_INTEROP_TRANSPORT");
     }
-    unsetenv("PYFMI_DIST_TRANSPORT_ENDPOINT");
-    unsetenv("PYFMI_DIST_TRANSPORT_TIMEOUT_MS");
+    unsetenv("PYFMI_INTEROP_TRANSPORT_ENDPOINT");
+    unsetenv("PYFMI_INTEROP_TRANSPORT_TIMEOUT_MS");
 #endif
 }
 
@@ -181,14 +181,14 @@ private:
 
 // Strong test factory.  The shared facade carries a weak default; the test
 // executable exports this definition (ENABLE_EXPORTS) so it wins at load time.
-extern "C" pyfmi_distributed::ModelRuntime* pyfmi_distributed_create_model() {
-    if (std::getenv("PYFMI_DIST_TEST_NO_MODEL") != nullptr) {
+extern "C" pyfmi_interop::ModelRuntime* pyfmi_interop_create_model() {
+    if (std::getenv("PYFMI_INTEROP_TEST_NO_MODEL") != nullptr) {
         return nullptr;
     }
     return new TestModel();
 }
 
-extern "C" void pyfmi_distributed_destroy_model(pyfmi_distributed::ModelRuntime* model) {
+extern "C" void pyfmi_interop_destroy_model(pyfmi_interop::ModelRuntime* model) {
     delete model;
 }
 

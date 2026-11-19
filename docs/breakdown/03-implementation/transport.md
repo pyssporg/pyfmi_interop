@@ -21,12 +21,12 @@ always built and the gated adapters are stubs by default.
 - **Loopback:** stores signals in preallocated frames for single-process tests
   and runs without a network or SDK.
 - **Gated stubs:** HLA, DIS, DCP, ROS 2, and ED-247 compile behind
-  `PYFMI_DIST_ENABLE_*`, default OFF; a stub links and reports unavailable.
+  `PYFMI_INTEROP_ENABLE_*`, default OFF; a stub links and reports unavailable.
 - **Libraries:** protocol serialization comes from prebuilt upstream libraries
   (OpenRTI, open-dis-cpp, DCPLib, `rclcpp`, ED247_LIBRARY); mapping code lives
   in `runtime/src/adapters/`. `cmake/adapters.cmake` prefers an installed
   package, then a `third_party/<lib>` submodule, then FetchContent with
-  `-DPYFMI_DIST_ALLOW_FETCH=ON`, then fails with the upstream URL.
+  `-DPYFMI_INTEROP_ALLOW_FETCH=ON`, then fails with the upstream URL.
 - **DCP:** ASAM X-DCP (Distributed Co-Simulation Protocol) via DCPLib; not DDS.
 - **No fallback:** a missing library or rejected configuration fails
   initialization; the runtime does not substitute loopback.

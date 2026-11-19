@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 // FMI scalar types supported by the realtime runtime.
 enum class DataType { Real, Integer, Boolean, String };
@@ -87,11 +87,11 @@ public:
     virtual void consume(const Sample& sample) { (void)sample; }
 };
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop
 
 // Factory supplied by the generated translation unit.  The default weak
 // definition in the runtime returns nullptr, which makes the FMI facade report
 // that the shared library was built without a model.  Declared at global scope
 // because the symbols are looked up by the FMI importer through dlsym().
-extern "C" pyfmi_distributed::ModelRuntime* pyfmi_distributed_create_model();
-extern "C" void pyfmi_distributed_destroy_model(pyfmi_distributed::ModelRuntime* model);
+extern "C" pyfmi_interop::ModelRuntime* pyfmi_interop_create_model();
+extern "C" void pyfmi_interop_destroy_model(pyfmi_interop::ModelRuntime* model);

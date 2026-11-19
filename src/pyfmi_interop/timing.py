@@ -1,6 +1,6 @@
 """Timing derivation and validation for the realtime execution IR.
 
-Rate groups are inferred from :attr:`pyfmi_distributed.ir.Signal.rate_hz`.
+Rate groups are inferred from :attr:`pyfmi_interop.ir.Signal.rate_hz`.
 Signals without a rate run every scheduler step and form the ``base`` group at
 the model step size.  Every other distinct rate becomes ``rate_<hz>hz`` with a
 deadline of 80 % of its period; the name is derived from the frequency so two
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 
-from pyfmi_distributed import ir
+from pyfmi_interop import ir
 
 __all__ = [
     "infer_rate_groups",
@@ -68,7 +68,7 @@ def infer_rate_groups(model: ir.ModelDefinition) -> tuple[ir.RateGroup, ...]:
 def validate_timing(model: ir.ModelDefinition) -> None:
     """Raise :class:`ValueError` unless the timing plan is executable.
 
-    On top of :meth:`pyfmi_distributed.ir.ModelDefinition.validate`, every
+    On top of :meth:`pyfmi_interop.ir.ModelDefinition.validate`, every
     grouped signal must run at its group's period, and a signal without a rate
     must sit in the base group.
     """

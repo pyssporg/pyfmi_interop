@@ -16,7 +16,7 @@ per-model `CMakeLists.txt`.
   parameter propagation into the model state.
 - **Hooks:** publish and consume call the bound adapter; `user_step` is the only
   place the model's equations belong.
-- **Factory:** the generated unit defines `pyfmi_distributed_create_model` and
+- **Factory:** the generated unit defines `pyfmi_interop_create_model` and
   its destroy function.
 - **Files:** `model_runtime.hpp`, `model_runtime.cpp`, `model_impl.hpp`,
   `bindings.cpp`, a canonical `model.json`, and `CMakeLists.txt`.

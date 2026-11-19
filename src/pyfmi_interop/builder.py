@@ -47,7 +47,7 @@ def resolve_runtime_library(runtime_library: str | Path | None = None) -> Path:
 
 
 def resolve_runtime_include(runtime_include: str | Path | None = None) -> Path:
-    """Return the directory that exposes ``pyfmi_distributed/runtime/*``."""
+    """Return the directory that exposes ``pyfmi_interop/runtime/*``."""
 
     if runtime_include is not None:
         candidate = Path(runtime_include)
@@ -103,10 +103,10 @@ def build_model(
         configure.extend(["-G", "Ninja"])
     configure.extend(
         [
-            f"-DPYFMI_DIST_RUNTIME_INCLUDE_DIR={include}",
-            f"-DPYFMI_DIST_RUNTIME_LIBRARY={library}",
-            f"-DPYFMI_DIST_SOURCE_DIR={source_root}",
-            f"-DPYFMI_DIST_CMAKE_DIR={cmake_module}",
+            f"-DPYFMI_INTEROP_RUNTIME_INCLUDE_DIR={include}",
+            f"-DPYFMI_INTEROP_RUNTIME_LIBRARY={library}",
+            f"-DPYFMI_INTEROP_SOURCE_DIR={source_root}",
+            f"-DPYFMI_INTEROP_CMAKE_DIR={cmake_module}",
         ]
     )
     configure.extend(str(argument) for argument in cmake_args)

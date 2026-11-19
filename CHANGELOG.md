@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-19
+
+### Changed
+
+- Renamed the project from `pyfmi-distributed` to `pyfmi-interop`: the Python
+  module is now `pyfmi_interop`, the C++ namespace and include directory are
+  `pyfmi_interop`, the CLI is `pyfmi-interop`, and CMake targets and options are
+  `pyfmi_interop_*` and `PYFMI_INTEROP_*`.
+
+### Breaking
+
+- Environment variables `PYFMI_DIST_*` are now `PYFMI_INTEROP_*`; there are no
+  compatibility aliases or fallbacks.
+- The C ABI factory is now `pyfmi_interop_create_model` /
+  `pyfmi_interop_destroy_model`.
+- C++ includes move from `pyfmi_distributed/runtime/...` to
+  `pyfmi_interop/runtime/...`.
+- The `pyfmi_distributed` Python module and the `pyfmi-distributed`
+  distribution/CLI names are removed without shims.
+
 ## [Unreleased]
 
 ### Added

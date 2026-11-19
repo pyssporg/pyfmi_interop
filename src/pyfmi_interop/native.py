@@ -22,7 +22,7 @@ __all__ = [
     "runtime_search_paths",
 ]
 
-RUNTIME_LIBRARY_NAME = "pyfmi_distributed_runtime"
+RUNTIME_LIBRARY_NAME = "pyfmi_interop_runtime"
 
 
 def runtime_library_name() -> str:
@@ -84,7 +84,7 @@ def runtime_search_paths(repo_root: Path | None = None) -> list[Path]:
 
 
 def runtime_include_dirs(repo_root: Path | None = None) -> list[Path]:
-    """Return include directories that expose ``pyfmi_distributed/runtime/*``."""
+    """Return include directories that expose ``pyfmi_interop/runtime/*``."""
 
     candidates: list[Path] = []
     bundled = bundled_include_dir()

@@ -13,7 +13,7 @@ The FMI 2.0 facade maps `fmi2*` entry points onto one `ModelRuntime` instance
 and contains no model equations.
 
 - **Create and destroy:** instantiation calls the generated
-  `pyfmi_distributed_create_model`; destruction releases it with the matching
+  `pyfmi_interop_create_model`; destruction releases it with the matching
   destroy function.
 - **Types:** real, integer, boolean, and string map to the IR and runtime
   `DataType`; the FMI ABI owns the pointer lifetimes.

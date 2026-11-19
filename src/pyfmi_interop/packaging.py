@@ -166,7 +166,7 @@ def render_model_description(model: ModelDefinition) -> str:
             "fmiVersion": "2.0",
             "modelName": model.name,
             "guid": model.guid,
-            "generationTool": "pyfmi-distributed",
+            "generationTool": "pyfmi-interop",
             "variableNamingConvention": "structured",
         },
     )

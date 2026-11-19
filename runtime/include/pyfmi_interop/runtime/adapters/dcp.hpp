@@ -2,12 +2,13 @@
 
 #include <string>
 
-#include "pyfmi_distributed/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/transport.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
-// IEEE 1278 DIS adapter.  Compile-gated stub: see dis.cpp.
-class DisTransport final : public Transport {
+// ASAM X-DCP (Distributed Co-Simulation Protocol) adapter.  Protocol traffic is
+// delegated to DCPLib; this file only maps model signals.  See dcp.cpp.
+class DcpTransport final : public Transport {
 public:
     bool initialize(const TransportConfig& config, std::string& error) override;
     void finalize() noexcept override;
@@ -16,4 +17,4 @@ public:
     bool receive(Sample& sample, std::string& error) override;
 };
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

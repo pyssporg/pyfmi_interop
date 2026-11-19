@@ -14,13 +14,13 @@ DCPLib. It is not DDS; DDS is a separate transport and has no adapter here.
 | Adapter | Standard | CMake gate | Upstream library | Pin | License | Acquisition | CMake targets | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | loopback | in-process frames | none, always built | — | — | — | built in | — | stable, implemented |
-| HLA | IEEE 1516 HLA | `PYFMI_DIST_ENABLE_HLA` | [OpenRTI](https://github.com/onox/OpenRTI) | `fb454e6` (0.10.0) | LGPL-2.1 / LGPL-3.0 / MPL-2.0 | submodule or FetchContent (no vcpkg port) | `rti1516e` (`pkg-config rti1516e` when installed) | skeleton, experimental |
-| DIS | IEEE 1278 DIS | `PYFMI_DIST_ENABLE_DIS` | [open-dis-cpp](https://github.com/open-dis/open-dis-cpp) | `v1.2.0` (vcpkg snapshot has 1.1.0) | BSD-2-Clause | vcpkg port `open-dis-cpp` (submodule/FetchContent fallback) | `OpenDIS::OpenDIS7` | skeleton, experimental |
-| DCP | ASAM X-DCP, Distributed Co-Simulation Protocol | `PYFMI_DIST_ENABLE_DCP` | [DCPLib](https://github.com/modelica/DCPLib) | `v0.2` | BSD-3-Clause | submodule or FetchContent (no vcpkg port; asio, xerces-c, libzip from vcpkg) | `DCPLib::Core`, `DCPLib::Slave`, `DCPLib::Master`, `DCPLib::Ethernet` | skeleton, experimental |
-| ROS 2 | ROS 2 Jazzy | `PYFMI_DIST_ENABLE_ROS2` | [`rclcpp`](https://github.com/ros2/rclcpp) | Jazzy (`release-jazzy-20260618`) | Apache-2.0 | system only: `source /opt/ros/jazzy/setup.bash`; never vendored | `rclcpp::rclcpp` | skeleton, experimental |
-| ED-247 | ED-247 (ARINC 664) | `PYFMI_DIST_ENABLE_ED247` | [Airbus ED247_LIBRARY](https://github.com/airbus/ED247_LIBRARY) | `VA2.3.0` | MIT | submodule or FetchContent (no vcpkg port, no installed package config; libxml2 from vcpkg) | `Ed247::static` | skeleton, experimental |
+| HLA | IEEE 1516 HLA | `PYFMI_INTEROP_ENABLE_HLA` | [OpenRTI](https://github.com/onox/OpenRTI) | `fb454e6` (0.10.0) | LGPL-2.1 / LGPL-3.0 / MPL-2.0 | submodule or FetchContent (no vcpkg port) | `rti1516e` (`pkg-config rti1516e` when installed) | skeleton, experimental |
+| DIS | IEEE 1278 DIS | `PYFMI_INTEROP_ENABLE_DIS` | [open-dis-cpp](https://github.com/open-dis/open-dis-cpp) | `v1.2.0` (vcpkg snapshot has 1.1.0) | BSD-2-Clause | vcpkg port `open-dis-cpp` (submodule/FetchContent fallback) | `OpenDIS::OpenDIS7` | skeleton, experimental |
+| DCP | ASAM X-DCP, Distributed Co-Simulation Protocol | `PYFMI_INTEROP_ENABLE_DCP` | [DCPLib](https://github.com/modelica/DCPLib) | `v0.2` | BSD-3-Clause | submodule or FetchContent (no vcpkg port; asio, xerces-c, libzip from vcpkg) | `DCPLib::Core`, `DCPLib::Slave`, `DCPLib::Master`, `DCPLib::Ethernet` | skeleton, experimental |
+| ROS 2 | ROS 2 Jazzy | `PYFMI_INTEROP_ENABLE_ROS2` | [`rclcpp`](https://github.com/ros2/rclcpp) | Jazzy (`release-jazzy-20260618`) | Apache-2.0 | system only: `source /opt/ros/jazzy/setup.bash`; never vendored | `rclcpp::rclcpp` | skeleton, experimental |
+| ED-247 | ED-247 (ARINC 664) | `PYFMI_INTEROP_ENABLE_ED247` | [Airbus ED247_LIBRARY](https://github.com/airbus/ED247_LIBRARY) | `VA2.3.0` | MIT | submodule or FetchContent (no vcpkg port, no installed package config; libxml2 from vcpkg) | `Ed247::static` | skeleton, experimental |
 
-The catalogue is `src/pyfmi_distributed/adapters.py`; the CLI, the CMake build,
+The catalogue is `src/pyfmi_interop/adapters.py`; the CLI, the CMake build,
 `vcpkg.json`, and this table read the same `AdapterDependency` metadata.
 
 ## Status
@@ -45,9 +45,9 @@ against a real or simulated endpoint and this table says so.
 1. **Installed package.** `find_package()` discovers a vcpkg or system
    installation (for ROS 2, the system Jazzy installation).
 2. **Submodule checkout.** `third_party/<lib>` is used when it exists and
-   `PYFMI_DIST_USE_SUBMODULES=ON` (default ON).
+   `PYFMI_INTEROP_USE_SUBMODULES=ON` (default ON).
 3. **FetchContent.** The pinned upstream revision is downloaded when
-   `-DPYFMI_DIST_ALLOW_FETCH=ON` (default OFF).
+   `-DPYFMI_INTEROP_ALLOW_FETCH=ON` (default OFF).
 4. **Hard error.** Configuration fails with the upstream URL, pin, and the
    acquisition instructions. It never falls back to a stub or another
    transport.
@@ -69,7 +69,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
   -DVCPKG_MANIFEST_MODE=ON \
   -DVCPKG_MANIFEST_FEATURES="dis;dcp" \
-  -DPYFMI_DIST_ENABLE_DIS=ON -DPYFMI_DIST_ENABLE_DCP=ON
+  -DPYFMI_INTEROP_ENABLE_DIS=ON -DPYFMI_INTEROP_ENABLE_DCP=ON
 cmake --build build
 ```
 
@@ -98,8 +98,8 @@ exception: `rclcpp` is an ament distribution and must come from
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DPYFMI_DIST_ENABLE_DCP=ON \
-  -DPYFMI_DIST_ALLOW_FETCH=ON
+  -DPYFMI_INTEROP_ENABLE_DCP=ON \
+  -DPYFMI_INTEROP_ALLOW_FETCH=ON
 cmake --build build
 ```
 
@@ -107,8 +107,8 @@ cmake --build build
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DPYFMI_DIST_ENABLE_HLA=ON \
-  -DPYFMI_DIST_USE_SUBMODULES=ON
+  -DPYFMI_INTEROP_ENABLE_HLA=ON \
+  -DPYFMI_INTEROP_USE_SUBMODULES=ON
 cmake --build build
 ```
 
@@ -120,7 +120,7 @@ inventing a replacement.
 
 Adding a protocol adapter is deliberately mechanical:
 
-1. **One descriptor** in `src/pyfmi_distributed/adapters.py`: name, display
+1. **One descriptor** in `src/pyfmi_interop/adapters.py`: name, display
    name, kind, CMake option, C++ class, summary, external requirement, and
    `AdapterDependency` (acquisition, upstream, pin, license, targets, submodule
    path).
@@ -128,10 +128,10 @@ Adding a protocol adapter is deliberately mechanical:
    `Transport::initialize`, `finalize`, `available`, `send`, and `receive`
    against the upstream library API.
 3. **One header** at
-   `runtime/include/pyfmi_distributed/runtime/adapters/<name>.hpp`, exposing
+   `runtime/include/pyfmi_interop/runtime/adapters/<name>.hpp`, exposing
    the adapter class.
 4. **Register** the source in `runtime/CMakeLists.txt`, add the option to
-   `PYFMI_DIST_RUNTIME_OPTIONS`, add the acquisition function to
+   `PYFMI_INTEROP_RUNTIME_OPTIONS`, add the acquisition function to
    `cmake/adapters.cmake`, and add the vcpkg feature to `vcpkg.json`.
 5. **Document** the row here and add the library gate to CI as an optional job,
    not a required one.
@@ -178,6 +178,6 @@ modifies the submodule working tree:
   `<limits>`, which newer libstdc++ no longer pulls in transitively. The module
   force-includes `<limits>` for the library's own objects.
 
-Bump a pin by changing the descriptor in `src/pyfmi_distributed/adapters.py`,
+Bump a pin by changing the descriptor in `src/pyfmi_interop/adapters.py`,
 checking out the new revision in the submodule, and re-running the adapter build
-with `-DPYFMI_DIST_ENABLE_<NAME>=ON`.
+with `-DPYFMI_INTEROP_ENABLE_<NAME>=ON`.

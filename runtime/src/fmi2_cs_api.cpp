@@ -1,5 +1,5 @@
-#include "pyfmi_distributed/runtime/model_runtime.hpp"
-#include "pyfmi_distributed/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/model_runtime.hpp"
+#include "pyfmi_interop/runtime/transport.hpp"
 
 #include "fmi2Functions.h"
 
@@ -12,12 +12,12 @@
 
 namespace {
 
-using pyfmi_distributed::DataType;
-using pyfmi_distributed::ModelRuntime;
-using pyfmi_distributed::Sample;
-using pyfmi_distributed::Transport;
-using pyfmi_distributed::TransportConfig;
-using pyfmi_distributed::Value;
+using pyfmi_interop::DataType;
+using pyfmi_interop::ModelRuntime;
+using pyfmi_interop::Sample;
+using pyfmi_interop::Transport;
+using pyfmi_interop::TransportConfig;
+using pyfmi_interop::Value;
 
 // One fmi2Component.  The facade is synchronous: fmi2DoStep calls
 // model->step() on the caller's thread and no background thread is created.
@@ -66,7 +66,7 @@ void log_instantiate_error(const fmi2CallbackFunctions* functions,
         return;
     }
     functions->logger(functions->componentEnvironment,
-                      instance_name != nullptr ? instance_name : "pyfmi_distributed",
+                      instance_name != nullptr ? instance_name : "pyfmi_interop",
                       fmi2Error, "error", "%s", message);
 }
 
@@ -96,7 +96,7 @@ fmi2Component transport_instantiate_failure(InstanceState* instance,
         instance->transport.reset();
     }
     if (instance->model != nullptr) {
-        pyfmi_distributed_destroy_model(instance->model);
+        pyfmi_interop_destroy_model(instance->model);
         instance->model = nullptr;
     }
     delete instance;
@@ -155,44 +155,44 @@ fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuType,
         return nullptr;
     }
 
-    ModelRuntime* model = pyfmi_distributed_create_model();
+    ModelRuntime* model = pyfmi_interop_create_model();
     if (model == nullptr) {
         log_instantiate_error(
             functions, instanceName,
-            "pyfmi_distributed: pyfmi_distributed_create_model() returned nullptr; "
+            "pyfmi_interop: pyfmi_interop_create_model() returned nullptr; "
             "the model library was built without a generated model");
         return nullptr;
     }
 
     auto* instance = new (std::nothrow) InstanceState {};
     if (instance == nullptr) {
-        pyfmi_distributed_destroy_model(model);
+        pyfmi_interop_destroy_model(model);
         log_instantiate_error(functions, instanceName,
-                              "pyfmi_distributed: out of memory creating instance");
+                              "pyfmi_interop: out of memory creating instance");
         return nullptr;
     }
 
     instance->model = model;
     instance->callbacks = *functions;
     instance->instance_name =
-        instanceName != nullptr ? instanceName : "pyfmi_distributed";
+        instanceName != nullptr ? instanceName : "pyfmi_interop";
     instance->logging_on = loggingOn == fmi2True;
 
-    const std::string transport_name = environment_value("PYFMI_DIST_TRANSPORT");
+    const std::string transport_name = environment_value("PYFMI_INTEROP_TRANSPORT");
     if (!transport_name.empty() && transport_name != "none") {
         TransportConfig config;
         config.name = transport_name;
-        config.endpoint = environment_value("PYFMI_DIST_TRANSPORT_ENDPOINT");
+        config.endpoint = environment_value("PYFMI_INTEROP_TRANSPORT_ENDPOINT");
 
         const std::string timeout_text =
-            environment_value("PYFMI_DIST_TRANSPORT_TIMEOUT_MS");
+            environment_value("PYFMI_INTEROP_TRANSPORT_TIMEOUT_MS");
         if (!timeout_text.empty()) {
             char* end = nullptr;
             const double timeout_ms = std::strtod(timeout_text.c_str(), &end);
             if (end == timeout_text.c_str() || *end != '\0' || timeout_ms < 0.0) {
                 return transport_instantiate_failure(
                     instance, functions, instanceName,
-                    "pyfmi_distributed: PYFMI_DIST_TRANSPORT_TIMEOUT_MS must be a "
+                    "pyfmi_interop: PYFMI_INTEROP_TRANSPORT_TIMEOUT_MS must be a "
                     "non-negative number");
             }
             config.timeout_s = timeout_ms / 1000.0;
@@ -204,23 +204,23 @@ fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuType,
 
         std::string transport_error;
         std::unique_ptr<Transport> transport =
-            pyfmi_distributed::make_transport(transport_name, transport_error);
+            pyfmi_interop::make_transport(transport_name, transport_error);
         if (transport == nullptr) {
             return transport_instantiate_failure(
                 instance, functions, instanceName,
-                "pyfmi_distributed: " + transport_error);
+                "pyfmi_interop: " + transport_error);
         }
         if (!transport->initialize(config, transport_error)) {
             return transport_instantiate_failure(
                 instance, functions, instanceName,
-                "pyfmi_distributed: transport '" + transport_name +
+                "pyfmi_interop: transport '" + transport_name +
                     "' failed to initialize: " + transport_error);
         }
         if (!transport->available()) {
             transport->finalize();
             return transport_instantiate_failure(
                 instance, functions, instanceName,
-                "pyfmi_distributed: transport '" + transport_name +
+                "pyfmi_interop: transport '" + transport_name +
                     "' is not available in this build");
         }
         instance->transport = std::move(transport);
@@ -239,7 +239,7 @@ void fmi2FreeInstance(fmi2Component c) {
         instance->transport.reset();
     }
     if (instance->model != nullptr) {
-        pyfmi_distributed_destroy_model(instance->model);
+        pyfmi_interop_destroy_model(instance->model);
         instance->model = nullptr;
     }
     delete instance;

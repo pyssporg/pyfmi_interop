@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from pyfmi_distributed import ir, sysml
+from pyfmi_interop import ir, sysml
 
 pytestmark = pytest.mark.unit
 

@@ -3,10 +3,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pyfmi_distributed
-from pyfmi_distributed import cli
-from pyfmi_distributed.codegen import generate_model
-from pyfmi_distributed.ir import (
+import pyfmi_interop
+from pyfmi_interop import cli
+from pyfmi_interop.codegen import generate_model
+from pyfmi_interop.ir import (
     DataType,
     Direction,
     ModelDefinition,
@@ -100,9 +100,9 @@ def test_sysml_generation_names_the_sysml_extra(tmp_path, capsys, monkeypatch):
     # The submodule may already be imported (and cached on the package) by an
     # earlier test; drop both caches so ``from . import sysml`` hits the patched
     # ``__getattr__`` instead of the cached submodule.
-    monkeypatch.delattr(pyfmi_distributed, "sysml", raising=False)
-    monkeypatch.delitem(sys.modules, "pyfmi_distributed.sysml", raising=False)
-    monkeypatch.setattr("pyfmi_distributed.__getattr__", missing_module)
+    monkeypatch.delattr(pyfmi_interop, "sysml", raising=False)
+    monkeypatch.delitem(sys.modules, "pyfmi_interop.sysml", raising=False)
+    monkeypatch.setattr("pyfmi_interop.__getattr__", missing_module)
 
     code = cli.main(
         [
@@ -158,8 +158,8 @@ def test_build_adapter_options_become_cmake_gates(monkeypatch, tmp_path, capsys)
         == 0
     )
     assert captured["cmake_args"] == [
-        "-DPYFMI_DIST_ENABLE_DIS=ON",
-        "-DPYFMI_DIST_ENABLE_HLA=ON",
+        "-DPYFMI_INTEROP_ENABLE_DIS=ON",
+        "-DPYFMI_INTEROP_ENABLE_HLA=ON",
     ]
 
     assert cli.main(["build", str(tmp_path)]) == 0

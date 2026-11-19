@@ -62,7 +62,7 @@ jobs:
               # <dist>.data/purelib/; accept either layout.
               assert any(
                   name.endswith(
-                      "pyfmi_distributed/_runtime/libpyfmi_distributed_runtime.a"
+                      "pyfmi_interop/_runtime/libpyfmi_interop_runtime.a"
                   )
                   for name in names
               ), "native runtime missing from the wheel"
@@ -75,10 +75,10 @@ jobs:
                   if name.endswith(".dist-info/METADATA")
               )
               text = zf.read(metadata).decode()
-          assert "Name: pyfmi-distributed" in text, text
+          assert "Name: pyfmi-interop" in text, text
           assert f"Version: {version}" in text, text
 
-          sdist_version = sdists[0].name.removeprefix("pyfmi_distributed-").removesuffix(".tar.gz")
+          sdist_version = sdists[0].name.removeprefix("pyfmi_interop-").removesuffix(".tar.gz")
           assert sdist_version == version, (sdists[0].name, version)
           print(wheel.name)
           PY
@@ -86,9 +86,9 @@ jobs:
       - name: Check the version tag
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          version="$(python -c 'import pyfmi_distributed; print(pyfmi_distributed.__version__)')"
+          version="$(python -c 'import pyfmi_interop; print(pyfmi_interop.__version__)')"
           if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match pyfmi_distributed.__version__ ${version}." >&2
+            echo "Tag ${GITHUB_REF_NAME} does not match pyfmi_interop.__version__ ${version}." >&2
             exit 1
           fi
 

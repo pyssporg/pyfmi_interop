@@ -1,17 +1,17 @@
-#include "pyfmi_distributed/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/transport.hpp"
 
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "pyfmi_distributed/runtime/adapters/dcp.hpp"
-#include "pyfmi_distributed/runtime/adapters/dis.hpp"
-#include "pyfmi_distributed/runtime/adapters/ed247.hpp"
-#include "pyfmi_distributed/runtime/adapters/hla.hpp"
-#include "pyfmi_distributed/runtime/adapters/ros2.hpp"
-#include "pyfmi_distributed/runtime/loopback_transport.hpp"
+#include "pyfmi_interop/runtime/adapters/dcp.hpp"
+#include "pyfmi_interop/runtime/adapters/dis.hpp"
+#include "pyfmi_interop/runtime/adapters/ed247.hpp"
+#include "pyfmi_interop/runtime/adapters/hla.hpp"
+#include "pyfmi_interop/runtime/adapters/ros2.hpp"
+#include "pyfmi_interop/runtime/loopback_transport.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 const std::string* TransportConfig::find(const std::string& key) const {
     for (const auto& option : options) {
@@ -57,4 +57,4 @@ bool transport_available(const std::string& name) {
     return transport != nullptr && transport->available();
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

@@ -1,10 +1,10 @@
-#include "pyfmi_distributed/runtime/scheduler.hpp"
+#include "pyfmi_interop/runtime/scheduler.hpp"
 
 #include <chrono>
 #include <string>
 #include <thread>
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -119,4 +119,4 @@ const SchedulerStats& Scheduler::stats() const noexcept {
     return stats_;
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

@@ -1,10 +1,10 @@
 """Realtime FMI generation, build and packaging for distributed simulation.
 
-The public surface is the IR (:mod:`pyfmi_distributed.ir`), the adapter
-catalogue (:mod:`pyfmi_distributed.adapters`), the C++ generator
-(:mod:`pyfmi_distributed.codegen`), the native build driver
-(:mod:`pyfmi_distributed.builder`), the FMU packager
-(:mod:`pyfmi_distributed.packaging`), and the ``pyfmi-distributed`` CLI.
+The public surface is the IR (:mod:`pyfmi_interop.ir`), the adapter
+catalogue (:mod:`pyfmi_interop.adapters`), the C++ generator
+(:mod:`pyfmi_interop.codegen`), the native build driver
+(:mod:`pyfmi_interop.builder`), the FMU packager
+(:mod:`pyfmi_interop.packaging`), and the ``pyfmi-interop`` CLI.
 
 ``timing`` and ``sysml`` are imported lazily: the SysML ingestion path depends
 on optional packages, and importing them must not make the runtime/codegen path
@@ -43,7 +43,7 @@ from .ir import (
 )
 from .packaging import package_fmu
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 _LAZY_MODULES = {
     "sysml": ".sysml",

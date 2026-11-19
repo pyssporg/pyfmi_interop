@@ -15,12 +15,12 @@ mode; the wheel build follows the same order.
 - **Toolchain:** Python >= 3.10, CMake, Ninja, and a C++17 compiler.
 - **Configure:** `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`.
 - **Build:** `cmake --build build` produces
-  `build/runtime/libpyfmi_distributed_runtime.a`.
+  `build/runtime/libpyfmi_interop_runtime.a`.
 - **Native tests:** `ctest --test-dir build --output-on-failure`.
 - **Install:** `python -m venv .venv`, activate it, then
   `pip install -e ".[dev]"`.
 - **SysML extra:** `pip install -e ".[sysml]"` where `pycps-sysml2` and
   `pyfmi-sysml2` are available; IR JSON input needs no extra.
 - **Wheel:** `python -m build` requires the runtime in `build/runtime/`; a
-  source-only install can opt out with `PYFMI_DIST_ALLOW_MISSING_RUNTIME=1`.
-- **CLI:** the editable install provides `pyfmi-distributed`.
+  source-only install can opt out with `PYFMI_INTEROP_ALLOW_MISSING_RUNTIME=1`.
+- **CLI:** the editable install provides `pyfmi-interop`.

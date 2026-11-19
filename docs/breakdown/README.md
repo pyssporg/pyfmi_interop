@@ -1,11 +1,11 @@
 ---
-title: Product Breakdown — pyfmi_distributed
+title: Product Breakdown — pyfmi_interop
 summary: Current-state record of why the distributed realtime FMU generator exists, the artifacts and contracts it promises, and how they are built, verified, and released.
 ---
 
-# Product Breakdown — pyfmi_distributed
+# Product Breakdown — pyfmi_interop
 
-Current-state record of `pyfmi_distributed`: why it exists, the contracts it
+Current-state record of `pyfmi_interop`: why it exists, the contracts it
 promises, and how generation, packaging, verification, and release are organized.
 
 ## The Seven Layers

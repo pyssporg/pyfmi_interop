@@ -1,6 +1,6 @@
 # Architecture
 
-`pyfmi_distributed` is split into a Python generation layer, a reusable C++
+`pyfmi_interop` is split into a Python generation layer, a reusable C++
 runtime, and the generated model that joins them. The generator and the runtime
 meet at one interface: `ModelRuntime`. Everything above it is generated; nothing
 below it knows the model's signals or equations.
@@ -11,13 +11,13 @@ below it knows the model's signals or equations.
 
 | Module | Responsibility |
 | --- | --- |
-| `src/pyfmi_distributed/ir.py` | `ModelDefinition`, `Signal`, `RateGroup`, `TransportBinding`, value-reference assignment, canonical JSON. |
-| `src/pyfmi_distributed/sysml.py` | Ingestion through `pycps_sysml2` and `pyfmi_sysml2` into the IR. |
-| `src/pyfmi_distributed/timing.py` | Rate and deadline validation, step alignment, and schedule construction. |
-| `src/pyfmi_distributed/codegen/` | Emits the C++ source tree and the per-model `CMakeLists.txt`. |
-| `src/pyfmi_distributed/builder.py` | Configures and runs the CMake build. |
-| `src/pyfmi_distributed/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
-| `src/pyfmi_distributed/cli.py` | The `pyfmi-distributed` command surface. |
+| `src/pyfmi_interop/ir.py` | `ModelDefinition`, `Signal`, `RateGroup`, `TransportBinding`, value-reference assignment, canonical JSON. |
+| `src/pyfmi_interop/sysml.py` | Ingestion through `pycps_sysml2` and `pyfmi_sysml2` into the IR. |
+| `src/pyfmi_interop/timing.py` | Rate and deadline validation, step alignment, and schedule construction. |
+| `src/pyfmi_interop/codegen/` | Emits the C++ source tree and the per-model `CMakeLists.txt`. |
+| `src/pyfmi_interop/builder.py` | Configures and runs the CMake build. |
+| `src/pyfmi_interop/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
+| `src/pyfmi_interop/cli.py` | The `pyfmi-interop` command surface. |
 
 ### C++ runtime layer
 
@@ -29,7 +29,7 @@ below it knows the model's signals or equations.
   accounting, and the optional spin-wait.
 - `Transport` — the adapter interface and registry. The loopback adapter is
   always built. HLA, DIS, DCP, ROS 2, and ED-247 are compile-gated stubs behind
-  `PYFMI_DIST_ENABLE_*`, default OFF. Protocol mapping code lives in
+  `PYFMI_INTEROP_ENABLE_*`, default OFF. Protocol mapping code lives in
   `runtime/src/adapters/` and binds the prebuilt upstream library; the
   repository does not implement protocol serialization.
 
@@ -39,9 +39,9 @@ below it knows the model's signals or equations.
 declares the vcpkg features. The acquisition order is fixed:
 
 1. an installed package discovered by `find_package()` (vcpkg or system);
-2. a `third_party/<lib>` submodule checkout (`PYFMI_DIST_USE_SUBMODULES=ON`,
+2. a `third_party/<lib>` submodule checkout (`PYFMI_INTEROP_USE_SUBMODULES=ON`,
    default ON);
-3. FetchContent of the pinned revision when `-DPYFMI_DIST_ALLOW_FETCH=ON`
+3. FetchContent of the pinned revision when `-DPYFMI_INTEROP_ALLOW_FETCH=ON`
    (default OFF);
 4. a hard configuration error naming the upstream URL, pin, and instructions.
 
@@ -57,13 +57,13 @@ Per model, codegen emits a small C++17 project (`model_runtime.hpp`,
 - typed signal members and value-reference accessors;
 - publish and consume hooks for the bound transport channels;
 - the `user_step` hook, where the model's equations belong;
-- the global factory `pyfmi_distributed_create_model` and its destroy function.
+- the global factory `pyfmi_interop_create_model` and its destroy function.
 
 ### Wheel layer
 
 The platform wheel (tag `py3-none-<platform>`) carries
-`_runtime/libpyfmi_distributed_runtime.a` plus the public headers under
-`_runtime/include/pyfmi_distributed/runtime/`. The wheel is not pure Python:
+`_runtime/libpyfmi_interop_runtime.a` plus the public headers under
+`_runtime/include/pyfmi_interop/runtime/`. The wheel is not pure Python:
 the native runtime must be built with CMake before `python -m build`.
 
 ## Data flow
@@ -109,7 +109,7 @@ generated header, the runtime accessors, and the FMI variables cannot disagree.
 
 ## Adapter gating
 
-`src/pyfmi_distributed/adapters.py` is the adapter catalogue. Each descriptor
+`src/pyfmi_interop/adapters.py` is the adapter catalogue. Each descriptor
 names the adapter, its CMake option, its C++ class, its external requirement,
 and its `AdapterDependency` metadata (acquisition, upstream, pin, license,
 CMake package and targets, submodule path). The gate rules:
@@ -120,7 +120,7 @@ CMake package and targets, submodule path). The gate rules:
 - an option ON without the library fails at CMake configuration or adapter
   initialization, with the missing dependency named;
 - the library comes from an installed package, a `third_party/<lib>` submodule,
-  or FetchContent with `-DPYFMI_DIST_ALLOW_FETCH=ON`, in that order;
+  or FetchContent with `-DPYFMI_INTEROP_ALLOW_FETCH=ON`, in that order;
 - the repository never reimplements protocol serialization; mapping code lives
   in `runtime/src/adapters/`;
 - DCP is ASAM X-DCP via DCPLib, not DDS;

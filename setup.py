@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover - wheel is a build dependency
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from pyfmi_distributed.native import (  # noqa: E402
+from pyfmi_interop.native import (  # noqa: E402
     default_runtime_library_path,
     runtime_library_name,
 )
@@ -37,17 +37,17 @@ class build_py(_build_py):
             # separately and found through native.runtime_search_paths().  A
             # wheel, however, must never ship without the native archive.
             if getattr(self, "editable_mode", False) or os.environ.get(
-                "PYFMI_DIST_ALLOW_MISSING_RUNTIME"
+                "PYFMI_INTEROP_ALLOW_MISSING_RUNTIME"
             ) == "1":
                 return
             raise FileNotFoundError(
                 f"native runtime not found: {source}. "
                 "Run 'cmake -S . -B build && cmake --build build' before "
-                "building the wheel, or set PYFMI_DIST_ALLOW_MISSING_RUNTIME=1 "
+                "building the wheel, or set PYFMI_INTEROP_ALLOW_MISSING_RUNTIME=1 "
                 "for a source-only install."
             )
 
-        destination_dir = Path(self.build_lib) / "pyfmi_distributed" / "_runtime"
+        destination_dir = Path(self.build_lib) / "pyfmi_interop" / "_runtime"
         destination_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination_dir / runtime_library_name())
 

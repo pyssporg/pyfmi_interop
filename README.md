@@ -1,4 +1,4 @@
-# pyfmi_distributed
+# pyfmi_interop
 
 Turn a SysML v2 definition of an FMU into an optimized C++17 realtime runtime
 with transport adapters, then package the result as an FMI 2.0 CoSimulation
@@ -29,7 +29,7 @@ The Python layer is split into `ir.py`, `sysml.py`, `timing.py`, `codegen/`,
 `builder.py`, `packaging.py`, and `cli.py`. The C++ layer in `runtime/` owns the
 `ModelRuntime` interface, the fixed-step realtime scheduler, and the `Transport`
 registry. Only the loopback adapter is always compiled; the remaining adapters
-are compile-gated stubs behind `PYFMI_DIST_ENABLE_*` and default to OFF.
+are compile-gated stubs behind `PYFMI_INTEROP_ENABLE_*` and default to OFF.
 
 ## Install
 
@@ -46,7 +46,7 @@ pip install -e ".[dev]"
 ```
 
 The wheel carries the static runtime
-`_runtime/libpyfmi_distributed_runtime.a` and the public headers under
+`_runtime/libpyfmi_interop_runtime.a` and the public headers under
 `_runtime/include/`. The native runtime must exist before the wheel is built;
 an editable source install follows the same rule.
 
@@ -57,17 +57,17 @@ JSON input needs no SysML dependency.
 ## Quickstart
 
 ```bash
-pyfmi-distributed adapters
-pyfmi-distributed inspect --model-json examples/loopback/model.json
-pyfmi-distributed generate --model-json examples/loopback/model.json --out build/loopback
-pyfmi-distributed build build/loopback
-pyfmi-distributed package build/loopback \
+pyfmi-interop adapters
+pyfmi-interop inspect --model-json examples/loopback/model.json
+pyfmi-interop generate --model-json examples/loopback/model.json --out build/loopback
+pyfmi-interop build build/loopback
+pyfmi-interop package build/loopback \
   --library build/loopback/build/libLoopbackModel.so \
   --out build/loopback.fmu
 ```
 
 The example is a 1 kHz model with one real input (`u`), one real output (`y`),
-and one loopback binding. Run `pyfmi-distributed <command> --help` for the
+and one loopback binding. Run `pyfmi-interop <command> --help` for the
 exact options of an installed build.
 
 ## Adapter status
@@ -75,11 +75,11 @@ exact options of an installed build.
 | Adapter | CMake option | Status | External requirement |
 | --- | --- | --- | --- |
 | loopback | none, always built | stable | none |
-| HLA | `PYFMI_DIST_ENABLE_HLA` | stub, experimental | OpenRTI (IEEE 1516) |
-| DIS | `PYFMI_DIST_ENABLE_DIS` | stub, experimental | open-dis-cpp |
-| DCP | `PYFMI_DIST_ENABLE_DCP` | stub, experimental | DCPLib (ASAM X-DCP); not DDS |
-| ROS 2 | `PYFMI_DIST_ENABLE_ROS2` | stub, experimental | `rclcpp`, system Jazzy |
-| ED-247 | `PYFMI_DIST_ENABLE_ED247` | stub, experimental | Airbus ED247_LIBRARY |
+| HLA | `PYFMI_INTEROP_ENABLE_HLA` | stub, experimental | OpenRTI (IEEE 1516) |
+| DIS | `PYFMI_INTEROP_ENABLE_DIS` | stub, experimental | open-dis-cpp |
+| DCP | `PYFMI_INTEROP_ENABLE_DCP` | stub, experimental | DCPLib (ASAM X-DCP); not DDS |
+| ROS 2 | `PYFMI_INTEROP_ENABLE_ROS2` | stub, experimental | `rclcpp`, system Jazzy |
+| ED-247 | `PYFMI_INTEROP_ENABLE_ED247` | stub, experimental | Airbus ED247_LIBRARY |
 
 No external protocol library is a hard build dependency. A gated-off adapter
 still links and reports `available() == false`; enabling an option without the
@@ -93,7 +93,7 @@ open-dis-cpp (DIS), DCPLib (ASAM X-DCP), `rclcpp` (ROS 2), and the Airbus
 ED247_LIBRARY (ED-247). The dependency table, pins, licenses, CMake targets, and
 acquisition rules are in `docs/adapters.md`; the vcpkg feature manifest is
 `vcpkg.json`. Installed packages are preferred, then `third_party/<lib>`
-submodules, then FetchContent with `-DPYFMI_DIST_ALLOW_FETCH=ON`; ROS 2 is a
+submodules, then FetchContent with `-DPYFMI_INTEROP_ALLOW_FETCH=ON`; ROS 2 is a
 system Jazzy installation only. The adapter bindings remain experimental
 skeletons, not completed mappings.
 

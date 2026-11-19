@@ -15,13 +15,13 @@ interface; loopback is always built and every other adapter is opt-in.
 - **Catalogue:** `adapters.py` is the only adapter list; the CLI, CMake options,
   vcpkg manifest, and documentation read it (`INFO-006`).
 - **Gate:** HLA, DIS, DCP, ROS 2, and ED-247 compile only with
-  `PYFMI_DIST_ENABLE_<NAME>=ON`; the default is OFF.
+  `PYFMI_INTEROP_ENABLE_<NAME>=ON`; the default is OFF.
 - **Stub:** a gated-off adapter still links, `available()` returns false, and
   `initialize()` fails with an actionable error.
 - **Dependency:** each non-loopback descriptor records acquisition, upstream,
   pin, license, CMake package and targets, and submodule path. The build prefers
   an installed package, then `third_party/<lib>`, then FetchContent with
-  `-DPYFMI_DIST_ALLOW_FETCH=ON`, then fails with the upstream URL. Protocol
+  `-DPYFMI_INTEROP_ALLOW_FETCH=ON`, then fails with the upstream URL. Protocol
   serialization is never reimplemented; mapping code lives in
   `runtime/src/adapters/`.
 - **DCP:** ASAM X-DCP (Distributed Co-Simulation Protocol) via DCPLib; not DDS.

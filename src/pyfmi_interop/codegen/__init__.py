@@ -1,4 +1,4 @@
-"""C++ source generation for :mod:`pyfmi_distributed`."""
+"""C++ source generation for :mod:`pyfmi_interop`."""
 
 from __future__ import annotations
 

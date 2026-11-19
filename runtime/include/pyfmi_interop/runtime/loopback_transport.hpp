@@ -3,9 +3,9 @@
 #include <cstddef>
 #include <string>
 
-#include "pyfmi_distributed/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/transport.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 // In-process transport used by tests and by generated models that run without
 // a network.  send() copies the frame into preallocated storage; receive()
@@ -31,4 +31,4 @@ private:
     bool has_sample_ = false;
 };
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

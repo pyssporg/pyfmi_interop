@@ -1,4 +1,4 @@
-"""Realtime execution IR shared by every generator in :mod:`pyfmi_distributed`.
+"""Realtime execution IR shared by every generator in :mod:`pyfmi_interop`.
 
 The IR is deliberately independent of SysML and of FMI.  Ingestion maps a
 SysML v2 architecture onto it (``sysml.py``), code generation consumes it
@@ -109,7 +109,7 @@ class Signal:
 class TransportBinding:
     """Binds one signal to one adapter channel.
 
-    ``transport`` is an adapter name registered in :mod:`pyfmi_distributed.adapters`.
+    ``transport`` is an adapter name registered in :mod:`pyfmi_interop.adapters`.
     ``channel`` is adapter specific: an HLA interaction/attribute name, a DIS
     entity/attribute path, a DCP signal path, a ROS 2 topic, an ED247 stream, etc.
     """

@@ -1,12 +1,12 @@
-#include "pyfmi_distributed/runtime/adapters/dcp.hpp"
-#include "pyfmi_distributed/runtime/adapters/dis.hpp"
-#include "pyfmi_distributed/runtime/adapters/ed247.hpp"
-#include "pyfmi_distributed/runtime/adapters/hla.hpp"
-#include "pyfmi_distributed/runtime/adapters/ros2.hpp"
-#include "pyfmi_distributed/runtime/loopback_transport.hpp"
-#include "pyfmi_distributed/runtime/model_runtime.hpp"
-#include "pyfmi_distributed/runtime/scheduler.hpp"
-#include "pyfmi_distributed/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/adapters/dcp.hpp"
+#include "pyfmi_interop/runtime/adapters/dis.hpp"
+#include "pyfmi_interop/runtime/adapters/ed247.hpp"
+#include "pyfmi_interop/runtime/adapters/hla.hpp"
+#include "pyfmi_interop/runtime/adapters/ros2.hpp"
+#include "pyfmi_interop/runtime/loopback_transport.hpp"
+#include "pyfmi_interop/runtime/model_runtime.hpp"
+#include "pyfmi_interop/runtime/scheduler.hpp"
+#include "pyfmi_interop/runtime/transport.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -18,7 +18,7 @@
 
 namespace {
 
-using namespace pyfmi_distributed;
+using namespace pyfmi_interop;
 
 int fail(const char* message) {
     std::cerr << message << '\n';

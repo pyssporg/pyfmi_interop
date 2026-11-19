@@ -7,9 +7,9 @@ from zipfile import ZipFile
 
 import pytest
 
-from pyfmi_distributed import native
-from pyfmi_distributed.codegen import generate_model
-from pyfmi_distributed.ir import (
+from pyfmi_interop import native
+from pyfmi_interop.codegen import generate_model
+from pyfmi_interop.ir import (
     DataType,
     Direction,
     ModelDefinition,
@@ -18,7 +18,7 @@ from pyfmi_distributed.ir import (
     TransportBinding,
     deterministic_guid,
 )
-from pyfmi_distributed.packaging import (
+from pyfmi_interop.packaging import (
     package_fmu,
     platform_binary_dir,
     platform_library_extension,

@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 enum class OverrunPolicy { Warn, Skip, Fail };
 
@@ -69,4 +69,4 @@ private:
 // loop directly rather than through the FMI facade.
 using RealtimeScheduler = Scheduler;
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

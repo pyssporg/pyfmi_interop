@@ -4,9 +4,9 @@
 #include <string>
 #include <vector>
 
-#include "pyfmi_distributed/runtime/model_runtime.hpp"
+#include "pyfmi_interop/runtime/model_runtime.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 // Configuration is passed to initialize() and may allocate.  Nothing inside
 // the step loop is allowed to build one of these.
@@ -45,11 +45,11 @@ public:
 };
 
 // Adapter registry.  `name` must match a descriptor in
-// `pyfmi_distributed.adapters.ADAPTERS`; unknown names return nullptr and fill
+// `pyfmi_interop.adapters.ADAPTERS`; unknown names return nullptr and fill
 // `error` with the list of known transports.
 std::unique_ptr<Transport> make_transport(const std::string& name, std::string& error);
 
 std::vector<std::string> transport_names();
 bool transport_available(const std::string& name);
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

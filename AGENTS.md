@@ -27,7 +27,7 @@ become. It is the first document to read, not a reference of last resort.
 
 ## Repository Focus
 
-`pyfmi_distributed` turns a SysML v2 definition of an FMU into an optimized
+`pyfmi_interop` turns a SysML v2 definition of an FMU into an optimized
 C++17 realtime runtime plus transport adapters, and packages the result as an
 FMI 2.0 CoSimulation FMU.
 
@@ -37,16 +37,16 @@ FMI 2.0 CoSimulation FMU.
   fixed-step scheduler, and the `Transport` registry.
 - The generated model owns the typed signal members, value-reference
   accessors, binding hooks, the `user_step` hook, and the factory
-  `pyfmi_distributed_create_model`.
+  `pyfmi_interop_create_model`.
 - Current state, contracts, and design rationale live in `docs/breakdown/`; the
   code is the source of truth only after the owning leaf has been updated.
 
 ## Hard constraints
 
-- **One IR.** `src/pyfmi_distributed/ir.py` is the only signal, rate, and
+- **One IR.** `src/pyfmi_interop/ir.py` is the only signal, rate, and
   binding model. Every generator, the builder, and the packager read it; none
   re-derives value references or timing.
-- **One adapter catalogue.** `src/pyfmi_distributed/adapters.py` is the only
+- **One adapter catalogue.** `src/pyfmi_interop/adapters.py` is the only
   adapter list. The CLI, CMake options, and documentation read the same table;
   no protocol-specific branch grows elsewhere.
 - **The generated artifact is the unit under test.** Assertions run against the
@@ -56,14 +56,14 @@ FMI 2.0 CoSimulation FMU.
   generated sources, FMI XML, and `.fmu` archives. The GUID is the stable uuid5
   from the model name; timestamps and zip order are fixed by packaging.
 - **No external protocol library is a hard build dependency.** HLA, DIS, DCP,
-  ROS 2, and ED-247 are compile-gated stubs behind `PYFMI_DIST_ENABLE_*`,
+  ROS 2, and ED-247 are compile-gated stubs behind `PYFMI_INTEROP_ENABLE_*`,
   default OFF. A stub reports unavailable; it never silently substitutes
   another transport.
 - **Protocol libraries are prebuilt, never reimplemented.** Each adapter binds
   an upstream library through its public API; protocol-specific mapping code
   lives in `runtime/src/adapters/`. The build acquires the library from an
   installed package (vcpkg or system) first, then a `third_party/<lib>`
-  submodule, then FetchContent when `-DPYFMI_DIST_ALLOW_FETCH=ON`, and otherwise
+  submodule, then FetchContent when `-DPYFMI_INTEROP_ALLOW_FETCH=ON`, and otherwise
   fails with the upstream URL and pin. ROS 2 is consumed from a system Jazzy
   installation only and must never be vendored. DCP is ASAM X-DCP via DCPLib,
   not DDS.

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pyfmi_distributed.adapters import (
+from pyfmi_interop.adapters import (
     ADAPTERS,
     adapter_manifest,
     get_adapter,

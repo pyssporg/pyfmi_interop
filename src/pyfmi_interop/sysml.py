@@ -2,7 +2,7 @@
 
 The SysML dialect itself is owned by :mod:`pycps_sysml2`; the FMI variable
 reduction is owned by :mod:`pyfmi_sysml2.core`.  This module only maps
-that reduction onto :mod:`pyfmi_distributed.ir`, so parsing is never
+that reduction onto :mod:`pyfmi_interop.ir`, so parsing is never
 re-implemented here.  Both packages are optional dependencies: importing this
 module works without them, calling :func:`load_model` or
 :func:`model_from_architecture` raises a :class:`RuntimeError` naming the
@@ -36,7 +36,7 @@ Transport bindings use the ``transport``, ``channel`` and optional
 ``transport_endpoint`` attributes.  A binding is emitted only when both
 ``transport`` and ``channel`` are present; port attributes override component
 attributes.  ``transport`` must name an adapter in
-:mod:`pyfmi_distributed.adapters`.
+:mod:`pyfmi_interop.adapters`.
 
 String signals get ``DEFAULT_STRING_CAPACITY`` bytes so the runtime owns their
 storage and never allocates inside the step loop.  ``pyfmi_sysml2.Variable``
@@ -52,8 +52,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from pyfmi_distributed import ir
-from pyfmi_distributed.adapters import get_adapter
+from pyfmi_interop import ir
+from pyfmi_interop.adapters import get_adapter
 
 __all__ = [
     "DEFAULT_STEP_SIZE_S",
@@ -68,7 +68,7 @@ DEFAULT_STEP_SIZE_S = 0.001
 #: Fixed storage reserved for a string signal's value.
 DEFAULT_STRING_CAPACITY = 256
 
-_SYSML_EXTRA = 'the "sysml" extra: pip install "pyfmi-distributed[sysml]"'
+_SYSML_EXTRA = 'the "sysml" extra: pip install "pyfmi-interop[sysml]"'
 
 _FMI_TYPES = {
     "real": ir.DataType.REAL,
@@ -124,7 +124,7 @@ def model_from_architecture(
 
     The model name defaults to the architecture's package name, sanitized to a
     C identifier.  Passing ``name`` keeps it verbatim so an invalid name is
-    rejected by :class:`pyfmi_distributed.ir.ModelDefinition` instead of being
+    rejected by :class:`pyfmi_interop.ir.ModelDefinition` instead of being
     silently rewritten.
     """
 

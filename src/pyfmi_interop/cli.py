@@ -1,4 +1,4 @@
-"""Command line interface for :mod:`pyfmi_distributed`.
+"""Command line interface for :mod:`pyfmi_interop`.
 
 The CLI is a thin dispatcher over the public API: it parses arguments, loads
 the IR, and prints the paths the Python layer produced.  Every expected failure
@@ -24,7 +24,7 @@ __all__ = ["build_parser", "main"]
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="pyfmi-distributed",
+        prog="pyfmi-interop",
         description="Generate, build and package realtime FMI runtimes.",
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -71,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help=(
             "Enable a transport adapter gate for this build (repeatable). "
-            "The matching PYFMI_DIST_ENABLE_* option is turned ON."
+            "The matching PYFMI_INTEROP_ENABLE_* option is turned ON."
         ),
     )
 
@@ -142,13 +142,13 @@ def _model_from_sysml(
     except ImportError as error:
         raise RuntimeError(
             "SysML ingestion is unavailable; install the 'sysml' extra with "
-            "'pip install pyfmi-distributed[sysml]'"
+            "'pip install pyfmi-interop[sysml]'"
         ) from error
 
     builder = getattr(sysml, "load_model", None)
     if builder is None:
         raise RuntimeError(
-            "pyfmi_distributed.sysml does not provide load_model(); "
+            "pyfmi_interop.sysml does not provide load_model(); "
             "reinstall the 'sysml' extra"
         )
     return builder(path, name=name, step_size_s=step_size)

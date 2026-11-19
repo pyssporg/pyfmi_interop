@@ -1,9 +1,9 @@
-#include "pyfmi_distributed/runtime/model_runtime.hpp"
+#include "pyfmi_interop/runtime/model_runtime.hpp"
 
 #include <algorithm>
 #include <utility>
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 Value Value::make_real(double value) {
     Value result;
@@ -60,4 +60,4 @@ void Sample::clear_valid() {
     std::fill(valid.begin(), valid.end(), static_cast<unsigned char>(0));
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

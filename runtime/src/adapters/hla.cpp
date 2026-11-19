@@ -1,15 +1,15 @@
-#include "pyfmi_distributed/runtime/adapters/hla.hpp"
+#include "pyfmi_interop/runtime/adapters/hla.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 namespace {
 
 const char* unavailable_reason() {
-#if defined(PYFMI_DIST_ENABLE_HLA) && PYFMI_DIST_ENABLE_HLA
+#if defined(PYFMI_INTEROP_ENABLE_HLA) && PYFMI_INTEROP_ENABLE_HLA
     return "HLA SDK binding is not implemented yet; this build configured "
-           "PYFMI_DIST_ENABLE_HLA=ON but the runtime still contains only a stub";
+           "PYFMI_INTEROP_ENABLE_HLA=ON but the runtime still contains only a stub";
 #else
     return "HLA transport is not compiled in; rebuild with "
-           "-DPYFMI_DIST_ENABLE_HLA=ON to enable the IEEE 1516 RTI binding";
+           "-DPYFMI_INTEROP_ENABLE_HLA=ON to enable the IEEE 1516 RTI binding";
 #endif
 }
 
@@ -36,4 +36,4 @@ bool HlaTransport::receive(Sample&, std::string& error) {
     return false;
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

@@ -2,9 +2,9 @@
 
 #include <string>
 
-#include "pyfmi_distributed/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/transport.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 
 // IEEE 1516 HLA federation adapter.  Compile-gated stub: see hla.cpp.
 class HlaTransport final : public Transport {
@@ -16,4 +16,4 @@ public:
     bool receive(Sample& sample, std::string& error) override;
 };
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

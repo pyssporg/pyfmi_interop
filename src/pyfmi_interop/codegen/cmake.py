@@ -34,7 +34,7 @@ def render_cmake(model: ModelDefinition) -> str:
     adapter_blocks = "\n".join(
         (
             f"if({option})\n"
-            f"    pyfmi_dist_configure_adapter({adapter} {model.name})\n"
+            f"    pyfmi_interop_configure_adapter({adapter} {model.name})\n"
             "endif()"
         )
         for adapter, option, _line in adapter_options
@@ -43,27 +43,27 @@ def render_cmake(model: ModelDefinition) -> str:
     if gate_expression:
         adapter_setup = f"""
 if({gate_expression})
-    if(NOT PYFMI_DIST_CMAKE_DIR)
+    if(NOT PYFMI_INTEROP_CMAKE_DIR)
         message(
             FATAL_ERROR
-            "PYFMI_DIST_CMAKE_DIR is required when a transport adapter gate is ON"
+            "PYFMI_INTEROP_CMAKE_DIR is required when a transport adapter gate is ON"
         )
     endif()
-    if(NOT PYFMI_DIST_SOURCE_DIR)
+    if(NOT PYFMI_INTEROP_SOURCE_DIR)
         get_filename_component(
-            PYFMI_DIST_SOURCE_DIR
-            "${{PYFMI_DIST_CMAKE_DIR}}/.."
+            PYFMI_INTEROP_SOURCE_DIR
+            "${{PYFMI_INTEROP_CMAKE_DIR}}/.."
             ABSOLUTE
         )
         set(
-            PYFMI_DIST_SOURCE_DIR
-            "${{PYFMI_DIST_SOURCE_DIR}}"
+            PYFMI_INTEROP_SOURCE_DIR
+            "${{PYFMI_INTEROP_SOURCE_DIR}}"
             CACHE PATH
-            "pyfmi-distributed source root (contains third_party/ and cmake/)"
+            "pyfmi-interop source root (contains third_party/ and cmake/)"
             FORCE
         )
     endif()
-    include("${{PYFMI_DIST_CMAKE_DIR}}/adapters.cmake")
+    include("${{PYFMI_INTEROP_CMAKE_DIR}}/adapters.cmake")
 endif()
 {adapter_blocks}
 """
@@ -76,42 +76,42 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(
-    PYFMI_DIST_RUNTIME_INCLUDE_DIR
+    PYFMI_INTEROP_RUNTIME_INCLUDE_DIR
     ""
     CACHE PATH
-    "Directory containing pyfmi_distributed/runtime/*.hpp"
+    "Directory containing pyfmi_interop/runtime/*.hpp"
 )
 set(
-    PYFMI_DIST_RUNTIME_LIBRARY
+    PYFMI_INTEROP_RUNTIME_LIBRARY
     ""
     CACHE FILEPATH
-    "Path to the static pyfmi-distributed runtime library"
+    "Path to the static pyfmi-interop runtime library"
 )
 set(
-    PYFMI_DIST_CMAKE_DIR
+    PYFMI_INTEROP_CMAKE_DIR
     ""
     CACHE PATH
     "Directory containing the shared adapters.cmake module"
 )
 set(
-    PYFMI_DIST_SOURCE_DIR
+    PYFMI_INTEROP_SOURCE_DIR
     ""
     CACHE PATH
-    "pyfmi-distributed source root (contains third_party/ and cmake/)"
+    "pyfmi-interop source root (contains third_party/ and cmake/)"
 )
 
 # Adapter gates.  They are plain boolean cache variables so the generated model
 # build accepts the same -D switches as the runtime build.
 {options}
 
-if(NOT PYFMI_DIST_RUNTIME_INCLUDE_DIR)
-    message(FATAL_ERROR "PYFMI_DIST_RUNTIME_INCLUDE_DIR is required")
+if(NOT PYFMI_INTEROP_RUNTIME_INCLUDE_DIR)
+    message(FATAL_ERROR "PYFMI_INTEROP_RUNTIME_INCLUDE_DIR is required")
 endif()
-if(NOT PYFMI_DIST_RUNTIME_LIBRARY)
-    message(FATAL_ERROR "PYFMI_DIST_RUNTIME_LIBRARY is required")
+if(NOT PYFMI_INTEROP_RUNTIME_LIBRARY)
+    message(FATAL_ERROR "PYFMI_INTEROP_RUNTIME_LIBRARY is required")
 endif()
-if(NOT EXISTS "${{PYFMI_DIST_RUNTIME_LIBRARY}}")
-    message(FATAL_ERROR "runtime library not found: ${{PYFMI_DIST_RUNTIME_LIBRARY}}")
+if(NOT EXISTS "${{PYFMI_INTEROP_RUNTIME_LIBRARY}}")
+    message(FATAL_ERROR "runtime library not found: ${{PYFMI_INTEROP_RUNTIME_LIBRARY}}")
 endif()
 
 find_package(Threads REQUIRED)
@@ -122,7 +122,7 @@ target_include_directories(
     {model.name}
     PRIVATE
     "${{CMAKE_CURRENT_SOURCE_DIR}}"
-    "${{PYFMI_DIST_RUNTIME_INCLUDE_DIR}}"
+    "${{PYFMI_INTEROP_RUNTIME_INCLUDE_DIR}}"
 )
 
 # Whole-archive keeps every runtime object, including the FMI facade and the
@@ -131,13 +131,13 @@ if(MSVC)
     target_link_options(
         {model.name}
         PRIVATE
-        "/WHOLEARCHIVE:${{PYFMI_DIST_RUNTIME_LIBRARY}}"
+        "/WHOLEARCHIVE:${{PYFMI_INTEROP_RUNTIME_LIBRARY}}"
     )
 elseif(APPLE)
     target_link_libraries(
         {model.name}
         PRIVATE
-        "-Wl,-force_load,${{PYFMI_DIST_RUNTIME_LIBRARY}}"
+        "-Wl,-force_load,${{PYFMI_INTEROP_RUNTIME_LIBRARY}}"
         Threads::Threads
     )
 else()
@@ -145,7 +145,7 @@ else()
         {model.name}
         PRIVATE
         "-Wl,--whole-archive"
-        "${{PYFMI_DIST_RUNTIME_LIBRARY}}"
+        "${{PYFMI_INTEROP_RUNTIME_LIBRARY}}"
         "-Wl,--no-whole-archive"
         Threads::Threads
     )

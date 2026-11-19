@@ -95,7 +95,7 @@ ADAPTERS: dict[str, AdapterDescriptor] = {
         name="hla",
         display_name="IEEE 1516 HLA",
         kind="federation",
-        cmake_option="PYFMI_DIST_ENABLE_HLA",
+        cmake_option="PYFMI_INTEROP_ENABLE_HLA",
         cpp_class="HlaTransport",
         summary=(
             "High Level Architecture federation adapter. Maps signals onto "
@@ -124,7 +124,7 @@ ADAPTERS: dict[str, AdapterDescriptor] = {
         name="dis",
         display_name="IEEE 1278 DIS",
         kind="federation",
-        cmake_option="PYFMI_DIST_ENABLE_DIS",
+        cmake_option="PYFMI_INTEROP_ENABLE_DIS",
         cpp_class="DisTransport",
         summary=(
             "Distributed Interactive Simulation adapter. Maps signals onto "
@@ -152,7 +152,7 @@ ADAPTERS: dict[str, AdapterDescriptor] = {
         name="dcp",
         display_name="ASAM X-DCP",
         kind="protocol",
-        cmake_option="PYFMI_DIST_ENABLE_DCP",
+        cmake_option="PYFMI_INTEROP_ENABLE_DCP",
         cpp_class="DcpTransport",
         summary=(
             "ASAM Distributed Co-Simulation Protocol adapter. Maps signals "
@@ -185,7 +185,7 @@ ADAPTERS: dict[str, AdapterDescriptor] = {
         name="ros2",
         display_name="ROS 2",
         kind="middleware",
-        cmake_option="PYFMI_DIST_ENABLE_ROS2",
+        cmake_option="PYFMI_INTEROP_ENABLE_ROS2",
         cpp_class="Ros2Transport",
         summary=(
             "ROS 2 adapter. Maps signals onto topics and performs the callback "
@@ -210,7 +210,7 @@ ADAPTERS: dict[str, AdapterDescriptor] = {
         name="ed247",
         display_name="ED-247 (ARINC 664)",
         kind="avionics",
-        cmake_option="PYFMI_DIST_ENABLE_ED247",
+        cmake_option="PYFMI_INTEROP_ENABLE_ED247",
         cpp_class="Ed247Transport",
         summary=(
             "ED-247 avionics adapter. Maps signals onto configured streams and "

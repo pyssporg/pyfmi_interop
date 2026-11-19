@@ -1,9 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-  "name": "pyfmi-distributed",
-  "version-string": "0.1.0",
+  "name": "pyfmi-interop",
+  "version-string": "0.2.0",
   "description": "Realtime FMI runtime and protocol adapters generated from SysML v2.",
-  "homepage": "https://github.com/pyssporg/pyfmi_distributed",
+  "homepage": "https://github.com/pyssporg/pyfmi_interop",
   "license": "MIT",
   "builtin-baseline": "296b89248ad13be09e9324488eb4f74dd322d26c",
   "features": {

@@ -15,10 +15,10 @@ From the repository root, after building the native runtime and installing the
 package:
 
 ```bash
-pyfmi-distributed inspect --model-json examples/loopback/model.json
-pyfmi-distributed generate --model-json examples/loopback/model.json --out build/loopback
-pyfmi-distributed build build/loopback
-pyfmi-distributed package build/loopback \
+pyfmi-interop inspect --model-json examples/loopback/model.json
+pyfmi-interop generate --model-json examples/loopback/model.json --out build/loopback
+pyfmi-interop build build/loopback
+pyfmi-interop package build/loopback \
   --library build/loopback/build/libLoopbackModel.so \
   --out build/loopback.fmu
 ```

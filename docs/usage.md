@@ -1,6 +1,6 @@
 # Usage
 
-`pyfmi-distributed` turns a SysML v2 model or an IR JSON file into generated
+`pyfmi-interop` turns a SysML v2 model or an IR JSON file into generated
 C++17 sources, builds them with CMake, and packages the result as an FMI 2.0
 CoSimulation FMU.
 
@@ -18,7 +18,7 @@ pip install -e ".[dev]"
 ```
 
 A wheel install replaces the editable step with
-`pip install pyfmi_distributed-<version>-py3-none-<platform>.whl`. The wheel
+`pip install pyfmi_interop-<version>-py3-none-<platform>.whl`. The wheel
 carries the prebuilt static runtime and public headers; it cannot be built
 without the native runtime in `build/runtime/`.
 
@@ -49,13 +49,13 @@ Run `inspect` first to validate the IR and see the resolved signal table
 without emitting anything:
 
 ```bash
-pyfmi-distributed inspect --model-json examples/loopback/model.json
+pyfmi-interop inspect --model-json examples/loopback/model.json
 ```
 
 ## Generate
 
 ```bash
-pyfmi-distributed generate --model-json examples/loopback/model.json \
+pyfmi-interop generate --model-json examples/loopback/model.json \
   --out build/loopback
 ```
 
@@ -63,7 +63,7 @@ Generation emits a small C++17 project: `model_runtime.hpp`,
 `model_runtime.cpp`, `model_impl.hpp`, `bindings.cpp`, `model.json`, and
 `CMakeLists.txt`. The source contains typed signal members, value-reference
 accessors, publish/consume hooks for the bindings, the `user_step` hook, and the
-`pyfmi_distributed_create_model` factory.
+`pyfmi_interop_create_model` factory.
 
 `model_impl.hpp` holds the empty `user_step` hook and is the one generated file
 meant to be edited for model equations. Everything else is build output: change
@@ -72,7 +72,7 @@ the IR or a generator template and regenerate rather than hand-editing it.
 ## Build
 
 ```bash
-pyfmi-distributed build build/loopback
+pyfmi-interop build build/loopback
 ```
 
 The build configures the per-model `CMakeLists.txt` in
@@ -82,9 +82,9 @@ intentionally enabled:
 
 ```bash
 cmake -S build/loopback -B build/loopback/out \
-  -DPYFMI_DIST_ENABLE_HLA=ON \
-  -DPYFMI_DIST_RUNTIME_INCLUDE_DIR=runtime/include \
-  -DPYFMI_DIST_RUNTIME_LIBRARY=build/runtime/libpyfmi_distributed_runtime.a
+  -DPYFMI_INTEROP_ENABLE_HLA=ON \
+  -DPYFMI_INTEROP_RUNTIME_INCLUDE_DIR=runtime/include \
+  -DPYFMI_INTEROP_RUNTIME_LIBRARY=build/runtime/libpyfmi_interop_runtime.a
 cmake --build build/loopback/out
 ```
 
@@ -94,7 +94,7 @@ unless their option is ON and their protocol library is present; see
 
 Enabling a gated adapter acquires the prebuilt upstream library from an
 installed package (vcpkg or system) first, then a `third_party/<lib>`
-submodule, then FetchContent with `-DPYFMI_DIST_ALLOW_FETCH=ON`. The vcpkg
+submodule, then FetchContent with `-DPYFMI_INTEROP_ALLOW_FETCH=ON`. The vcpkg
 features are declared in `vcpkg.json`; ROS 2 comes from a system Jazzy
 installation only. The dependency table and exact commands are in
 `docs/adapters.md`.
@@ -102,7 +102,7 @@ installation only. The dependency table and exact commands are in
 ## Package
 
 ```bash
-pyfmi-distributed package build/loopback \
+pyfmi-interop package build/loopback \
   --library build/loopback/build/libLoopbackModel.so \
   --out build/loopback.fmu
 ```
@@ -120,16 +120,16 @@ the built shared library. The library must exist and match the model name.
 
 | Command | Purpose |
 | --- | --- |
-| `pyfmi-distributed adapters` | List the adapter catalogue, kind, availability, and external requirement. |
-| `pyfmi-distributed inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
-| `pyfmi-distributed generate --model-json PATH --out DIR` | Generate C++ from IR JSON. |
-| `pyfmi-distributed generate --sysml PATH --out DIR [--step-size S] [--name NAME]` | Generate C++ from SysML v2. |
-| `pyfmi-distributed build DIR [--build-dir DIR]` | Configure and build a generated model with CMake. |
-| `pyfmi-distributed package DIR --library PATH --out FILE.fmu` | Write the FMI 2.0 description and deterministic FMU archive. |
+| `pyfmi-interop adapters` | List the adapter catalogue, kind, availability, and external requirement. |
+| `pyfmi-interop inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
+| `pyfmi-interop generate --model-json PATH --out DIR` | Generate C++ from IR JSON. |
+| `pyfmi-interop generate --sysml PATH --out DIR [--step-size S] [--name NAME]` | Generate C++ from SysML v2. |
+| `pyfmi-interop build DIR [--build-dir DIR]` | Configure and build a generated model with CMake. |
+| `pyfmi-interop package DIR --library PATH --out FILE.fmu` | Write the FMI 2.0 description and deterministic FMU archive. |
 
 Handled model, input, and build errors print `error: <message>` on stderr and
 exit 1; argument errors use the argparse exit code. Run
-`pyfmi-distributed <command> --help` for the exact options of the installed
+`pyfmi-interop <command> --help` for the exact options of the installed
 version.
 
 ## FMI XML notes

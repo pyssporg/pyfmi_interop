@@ -1,15 +1,15 @@
-#include "pyfmi_distributed/runtime/adapters/dcp.hpp"
+#include "pyfmi_interop/runtime/adapters/dcp.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 namespace {
 
 const char* unavailable_reason() {
-#if defined(PYFMI_DIST_ENABLE_DCP) && PYFMI_DIST_ENABLE_DCP
+#if defined(PYFMI_INTEROP_ENABLE_DCP) && PYFMI_INTEROP_ENABLE_DCP
     return "ASAM X-DCP adapter is built against DCPLib but the signal mapping "
            "is not implemented yet";
 #else
     return "ASAM X-DCP adapter is not compiled in; configure with "
-           "-DPYFMI_DIST_ENABLE_DCP=ON to link DCPLib";
+           "-DPYFMI_INTEROP_ENABLE_DCP=ON to link DCPLib";
 #endif
 }
 
@@ -36,4 +36,4 @@ bool DcpTransport::receive(Sample&, std::string& error) {
     return false;
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop

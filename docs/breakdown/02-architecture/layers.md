@@ -22,7 +22,7 @@ separate, one-way layers joined by the IR and the `ModelRuntime` interface.
   submodule, or FetchContent; the repository does not reimplement protocol
   serialization.
 - **Generated model:** one C++17 source tree per model with typed signals,
-  accessors, binding hooks, `user_step`, and `pyfmi_distributed_create_model`.
+  accessors, binding hooks, `user_step`, and `pyfmi_interop_create_model`.
 - **Flow:** SysML or IR JSON to IR, to generated C++ and CMake, to a native
   build, to an FMI 2.0 CoSimulation `.fmu`.
 - **Ingestion:** `sysml.py` uses `pycps_sysml2` and `pyfmi_sysml2`; the IR stays

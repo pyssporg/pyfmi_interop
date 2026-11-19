@@ -1,15 +1,15 @@
-#include "pyfmi_distributed/runtime/adapters/ed247.hpp"
+#include "pyfmi_interop/runtime/adapters/ed247.hpp"
 
-namespace pyfmi_distributed {
+namespace pyfmi_interop {
 namespace {
 
 const char* unavailable_reason() {
-#if defined(PYFMI_DIST_ENABLE_ED247) && PYFMI_DIST_ENABLE_ED247
+#if defined(PYFMI_INTEROP_ENABLE_ED247) && PYFMI_INTEROP_ENABLE_ED247
     return "ED-247 SDK binding is not implemented yet; this build configured "
-           "PYFMI_DIST_ENABLE_ED247=ON but the runtime still contains only a stub";
+           "PYFMI_INTEROP_ENABLE_ED247=ON but the runtime still contains only a stub";
 #else
     return "ED-247 transport is not compiled in; rebuild with "
-           "-DPYFMI_DIST_ENABLE_ED247=ON to enable the ARINC 664 binding";
+           "-DPYFMI_INTEROP_ENABLE_ED247=ON to enable the ARINC 664 binding";
 #endif
 }
 
@@ -36,4 +36,4 @@ bool Ed247Transport::receive(Sample&, std::string& error) {
     return false;
 }
 
-}  // namespace pyfmi_distributed
+}  // namespace pyfmi_interop
