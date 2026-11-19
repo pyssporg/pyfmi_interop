@@ -16,7 +16,6 @@ from pyfmi_interop.ir import (
     ProjectionError,
     RateGroup,
     Signal,
-    TransportBinding,
     deterministic_guid,
 )
 from pyfmi_interop.packaging import (
@@ -35,16 +34,11 @@ def make_model() -> ModelDefinition:
         Signal("enable", 3, DataType.BOOLEAN, Direction.PARAMETER, initial=True),
         Signal("mode", 4, DataType.INTEGER, Direction.PARAMETER, initial=2),
     )
-    bindings = (
-        TransportBinding("speed", "hla", "Speed", Direction.OUTPUT),
-        TransportBinding("setpoint", "dis", "Setpoint", Direction.INPUT),
-    )
     return ModelDefinition(
         name="demo_model",
         guid=deterministic_guid("demo_model"),
         step_size_s=0.01,
         signals=signals,
-        bindings=bindings,
         rate_groups=(RateGroup("fast", 0.02, 0.01, ("setpoint",)),),
         description="packaging fixture",
     )
@@ -70,7 +64,6 @@ def test_archive_layout_is_sorted_and_self_describing(tmp_path):
     )
     assert set(names) == {
         "modelDescription.xml",
-        "resources/adapters.json",
         "resources/model.json",
         "resources/runtime.json",
         expected_binary,
@@ -152,27 +145,18 @@ def test_model_description_is_valid_fmi2(tmp_path):
     assert [item.attrib["index"] for item in outputs] == ["1", "2"]
 
 
-def test_runtime_and_adapters_resources(tmp_path):
+def test_runtime_and_model_resources(tmp_path):
     _, destination = package_fixture(tmp_path)
 
     with ZipFile(destination) as archive:
         runtime = json.loads(archive.read("resources/runtime.json"))
-        adapters = json.loads(archive.read("resources/adapters.json"))
         model = json.loads(archive.read("resources/model.json"))
 
     assert runtime["modelIdentifier"] == "demo_model"
     assert runtime["platform"] == platform_binary_dir()
     assert runtime["binary"].endswith(f"demo_model{platform_library_extension()}")
-    assert runtime["adapters"] == ["dis", "hla"]
+    assert "adapters" not in runtime
     assert model["name"] == "demo_model"
-    assert {item["name"] for item in adapters["adapters"]} == {
-        "dcp",
-        "dis",
-        "ed247",
-        "hla",
-        "loopback",
-        "ros2",
-    }
 
 
 def test_missing_library_is_rejected(tmp_path):
@@ -195,8 +179,7 @@ def test_missing_model_json_is_rejected(tmp_path):
 def test_native_cmake_module_prefers_source_tree(tmp_path):
     source = tmp_path / "repo"
     (source / "cmake").mkdir(parents=True)
-    for name in ("adapters.cmake", "wire.cmake"):
-        (source / "cmake" / name).write_text(f"# bundled {name}\n", encoding="utf-8")
+    (source / "cmake" / "wire.cmake").write_text("# bundled wire\n", encoding="utf-8")
 
     assert native.cmake_module_dir(source) == source / "cmake"
 

@@ -79,10 +79,9 @@ public:
     virtual bool read(std::uint32_t value_reference, Value& out) const = 0;
     virtual bool write(std::uint32_t value_reference, const Value& value) = 0;
 
-    // Transport exchange hooks.  The generated model knows which signals are
-    // bound to which adapter, so it packs outputs and unpacks inputs itself.
-    // Defaults are no-ops so a model without bindings needs no transport.
-    // Both hooks run inside the step deadline and must not allocate.
+    // Transport exchange hooks.  The generated model owns sample population;
+    // defaults are no-ops.  Both hooks run inside the step deadline and must
+    // not allocate.
     virtual void publish(Sample& sample) const { (void)sample; }
     virtual void consume(const Sample& sample) { (void)sample; }
 };

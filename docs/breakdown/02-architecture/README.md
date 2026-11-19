@@ -13,6 +13,6 @@ and why they meet at one IR and one interface.
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with `pb registers`. -->
 - **INFO-002** [Layer and module map](layers.md) — Python generates, C++ executes, and the generated model joins them through the ModelRuntime interface and one IR.
-- **INFO-003** [Execution IR](ir.md) — ModelDefinition is the single source of truth for signals, value references, rates, and transport bindings.
-- **INFO-004** [Code generation](codegen.md) — codegen emits a C++17 source tree and one CMakeLists.txt per model, with typed signals, binding hooks, user_step, and the factory.
+- **INFO-003** [Execution IR](ir.md) — ModelDefinition is the single source of truth for signals, value references, and rates.
+- **INFO-004** [Code generation](codegen.md) — codegen emits a C++17 source tree and one CMakeLists.txt per model, with typed signals, publish/consume hooks, user_step, and the factory.
 <!-- pb:index:end -->

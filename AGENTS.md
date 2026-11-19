@@ -28,45 +28,34 @@ become. It is the first document to read, not a reference of last resort.
 ## Repository Focus
 
 `pyfmi_interop` turns a SysML v2 definition of an FMU into an optimized
-C++17 realtime runtime plus transport adapters, and packages the result as an
-FMI 2.0 CoSimulation FMU.
+C++17 realtime runtime, carries its model interface on one versioned wire
+format, and packages the result as an FMI 2.0 CoSimulation FMU.
 
-- The Python layer ingests SysML or IR JSON, emits C++ and CMake, builds the
-  native model, and packages the FMU.
+- The Python layer ingests SysML or IR JSON, emits C++, CMake, and the wire
+  schema, builds the native model, and packages the FMU.
 - The C++ layer in `runtime/` owns the reusable `ModelRuntime` interface, the
-  fixed-step scheduler, and the `Transport` registry.
+  fixed-step scheduler, the wire codec, and the `Transport` registry.
 - The generated model owns the typed signal members, value-reference
-  accessors, binding hooks, the `user_step` hook, and the factory
+  accessors, the `user_step` hook, and the factory
   `pyfmi_interop_create_model`.
 - Current state, contracts, and design rationale live in `docs/breakdown/`; the
   code is the source of truth only after the owning leaf has been updated.
 
 ## Hard constraints
 
-- **One IR.** `src/pyfmi_interop/ir.py` is the only signal, rate, and
-  binding model. Every generator, the builder, and the packager read it; none
-  re-derives value references or timing.
-- **One adapter catalogue.** `src/pyfmi_interop/adapters.py` is the only
-  adapter list. The CLI, CMake options, and documentation read the same table;
-  no protocol-specific branch grows elsewhere.
+- **One IR.** `src/pyfmi_interop/ir.py` is the only signal and rate model.
+  Every generator, the builder, and the packager read it; none re-derives value
+  references or timing.
+- **One wire contract.** `src/pyfmi_interop/wire/` and `runtime/src/wire.cpp`
+  are the only framing implementations, and `schema.py` is the only payload
+  schema emitter. Both ends must reproduce the same conformance vectors; no
+  protocol-specific branch grows elsewhere.
 - **The generated artifact is the unit under test.** Assertions run against the
   emitted C++ source, the per-model CMake build, or the packed `.fmu`, not
   against an intermediate string the writer might not use.
 - **Deterministic output.** Equal IR and equal inputs produce byte-identical
   generated sources, FMI XML, and `.fmu` archives. The GUID is the stable uuid5
   from the model name; timestamps and zip order are fixed by packaging.
-- **No external protocol library is a hard build dependency.** HLA, DIS, DCP,
-  ROS 2, and ED-247 are compile-gated stubs behind `PYFMI_INTEROP_ENABLE_*`,
-  default OFF. A stub reports unavailable; it never silently substitutes
-  another transport.
-- **Protocol libraries are prebuilt, never reimplemented.** Each adapter binds
-  an upstream library through its public API; protocol-specific mapping code
-  lives in `runtime/src/adapters/`. The build acquires the library from an
-  installed package (vcpkg or system) first, then a `third_party/<lib>`
-  submodule, then FetchContent when `-DPYFMI_INTEROP_ALLOW_FETCH=ON`, and otherwise
-  fails with the upstream URL and pin. ROS 2 is consumed from a system Jazzy
-  installation only and must never be vendored. DCP is ASAM X-DCP via DCPLib,
-  not DDS.
 - **Do not edit generated files by hand.** Change the IR, the generator, or the
   template, then regenerate. A hand edit is overwritten and hides the real
   source of the change. The one exception is `model_impl.hpp`, the designated

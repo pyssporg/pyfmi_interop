@@ -20,8 +20,9 @@ and one generated realtime binary.
   reference taken from the IR (`INFO-003`).
 - **Identity:** the GUID is the stable uuid5 derived from the model name
   (`INFO-003`).
-- **Resources:** canonical `model.json`, `runtime.json`, and `adapters.json`
-  under `resources/`, so the archive is self-describing.
+- **Resources:** canonical `model.json` and `runtime.json` under `resources/`,
+  plus the `<Model>.proto` and `wire.json` schema bundle next to the binary, so
+  the archive is self-describing.
 - **Determinism:** packaging sorts entries, fixes file modes and timestamps to
   a constant, and emits byte-identical archives for equal inputs.
 - **Validity:** the document has one `CoSimulation` element and declares its

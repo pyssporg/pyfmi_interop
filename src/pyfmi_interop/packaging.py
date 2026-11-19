@@ -15,7 +15,6 @@ from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from .adapters import available_adapters
 from .ir import (
     DataType,
     Direction,
@@ -84,7 +83,6 @@ def package_fmu(
         "modelDescription.xml": render_model_description(model).encode("utf-8"),
         "resources/model.json": _canonical_model_json(model),
         "resources/runtime.json": _runtime_json(model, binary_arcname, platform_dir),
-        "resources/adapters.json": _adapters_json(),
         binary_arcname: binary.read_bytes(),
     }
     # The schema travels with the binary: a third-party decoder needs only the
@@ -122,7 +120,6 @@ def _runtime_json(
     binary_arcname: str,
     platform_dir: str,
 ) -> bytes:
-    used = sorted({binding.transport for binding in model.bindings})
     payload = {
         "modelName": model.name,
         "modelIdentifier": model.name,
@@ -130,25 +127,6 @@ def _runtime_json(
         "fingerprint": fingerprint(model),
         "binary": binary_arcname,
         "platform": platform_dir,
-        "adapters": used,
-    }
-    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
-
-
-def _adapters_json() -> bytes:
-    payload = {
-        "adapters": [
-            {
-                "name": descriptor.name,
-                "displayName": descriptor.display_name,
-                "kind": descriptor.kind,
-                "cmakeOption": descriptor.cmake_option,
-                "cppClass": descriptor.cpp_class,
-                "experimental": descriptor.experimental,
-                "requires": list(descriptor.requires),
-            }
-            for descriptor in available_adapters()
-        ]
     }
     return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
 

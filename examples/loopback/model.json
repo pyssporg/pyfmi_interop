@@ -1,20 +1,4 @@
 {
-  "bindings": [
-    {
-      "channel": "in",
-      "config": {},
-      "direction": "input",
-      "signal": "u",
-      "transport": "loopback"
-    },
-    {
-      "channel": "out",
-      "config": {},
-      "direction": "output",
-      "signal": "y",
-      "transport": "loopback"
-    }
-  ],
   "description": "One-input one-output 1 kHz loopback example.",
   "guid": "a2c38065-1d4c-52c8-bfcf-54496c5e8186",
   "metadata": {},

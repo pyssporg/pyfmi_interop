@@ -11,8 +11,8 @@ repository's own contract. The project does not interpret the model it carries.
 SysML v2 definition (.sysml)
         │  sysml.py — pycps_sysml2 + pyfmi_sysml2 ingestion
         ▼
-ModelDefinition IR — signals, value references, rates, transport bindings
-        │  codegen/ — typed signals, binding hooks, user_step, factory
+ModelDefinition IR — signals, value references, rates
+        │  codegen/ — typed signals, user_step, factory
         ▼
 Generated C++17 model + per-model CMakeLists.txt
         │  builder.py — CMake
@@ -27,9 +27,8 @@ Wire format: protobuf payload in length + CRC32 + format-version frames.
 
 The Python layer is split into `ir.py`, `sysml.py`, `timing.py`, `codegen/`,
 `builder.py`, `packaging.py`, and `cli.py`. The C++ layer in `runtime/` owns the
-`ModelRuntime` interface, the fixed-step realtime scheduler, and the types the
-wire codec shares with the Python end. The adapter catalogue and its
-compile-gated stubs are removed by the wire-format work.
+`ModelRuntime` interface, the fixed-step realtime scheduler, the wire codec,
+and the types it shares with the Python end.
 
 ## Install
 
@@ -57,7 +56,7 @@ JSON input needs no SysML dependency.
 ## Quickstart
 
 ```bash
-pyfmi-interop adapters
+pyfmi-interop transports
 pyfmi-interop inspect --model-json examples/loopback/model.json
 pyfmi-interop generate --model-json examples/loopback/model.json --out build/loopback
 pyfmi-interop build build/loopback
@@ -66,9 +65,9 @@ pyfmi-interop package build/loopback \
   --out build/loopback.fmu
 ```
 
-The example is a 1 kHz model with one real input (`u`), one real output (`y`),
-and one loopback binding. Run `pyfmi-interop <command> --help` for the
-exact options of an installed build.
+The example is a 1 kHz model with one real input (`u`) and one real output
+(`y`). Run `pyfmi-interop <command> --help` for the exact options of an
+installed build.
 
 ## Wire format
 
@@ -80,9 +79,8 @@ exact options of an installed build.
   beyond the payload.
 - **Ends:** a Python end and a C++ end share one set of conformance byte
   vectors, and both must reproduce them.
-- **Non-goals:** HLA/RTI conformance, DCP, ED-247, ROS 2, DIS as a canonical
-  vocabulary, radio or medium models, time management, mission coordination,
-  the federation-endpoint role, and an adapter catalogue.
+- **Non-goals:** protocol bindings, radio or medium models, time management,
+  mission coordination, the federation-endpoint role, and an adapter catalogue.
 
 ## Development
 
@@ -100,8 +98,7 @@ and `AGENTS.md` for the contributor rules.
 ## Documentation
 
 - `docs/architecture.md` — layers, data flow, and realtime design.
-- `docs/adapters.md` — legacy adapter catalogue, removed when `docs/wire.md`
-  lands.
+- `docs/wire.md` — envelope layout, model id, CRC32, and the schema bundle.
 - `docs/usage.md` — install, generate, build, package, and CLI reference.
 - `docs/breakdown/README.md` — current-state product breakdown.
 - `examples/README.md` — checked-in IR examples.

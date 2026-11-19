@@ -11,12 +11,12 @@ promises, and how generation, packaging, verification, and release are organized
 ## The Seven Layers
 
 - `00-intent/` — why the project exists and what it refuses to become.
-- `01-product/` — the artifact, realtime, and adapter contracts.
+- `01-product/` — the artifact, realtime, and byte transport contracts.
 - `02-architecture/` — layer map, the IR, and code generation.
 - `03-implementation/` — the scheduler, the transport runtime, and the FMI facade.
 - `04-verification/` — the test ladder and its default gate.
 - `05-operation/` — local setup and release.
-- `06-evolution/` — the wire-format roadmap.
+- `06-evolution/` — open work after the wire-only remit.
 - the decision archive (`docs/archive/archive.zip`) — dated decisions, history
   only, read via `pb archive`.
 

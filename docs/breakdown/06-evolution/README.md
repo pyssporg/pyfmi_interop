@@ -1,6 +1,6 @@
 ---
 title: Evolution
-summary: Open work to land the wire format and remove the adapter surface.
+summary: Open work after the wire-only remit landed.
 ---
 
 # Evolution
@@ -11,5 +11,5 @@ Not-yet-built work. Current behaviour is never restated here.
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with `pb registers`. -->
-- **INFO-010** [Wire format roadmap](roadmap.md) — The next work lands one protobuf wire format with length, CRC32, and version framing, its Python and C++ ends, and removes the adapter surface.
+- **INFO-010** [Wire format roadmap](roadmap.md) — The wire-only remit landed; the next release is 0.3.0 and no adapter surface returns.
 <!-- pb:index:end -->

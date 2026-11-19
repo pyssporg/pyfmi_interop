@@ -5,9 +5,9 @@ model that the CLI can inspect, generate from, build, and package without a
 SysML dependency. No binaries, generated sources, or `.fmu` archives are
 checked in.
 
-| Example | Model | Step | Signals | Binding |
-| --- | --- | --- | --- | --- |
-| `loopback/` | `LoopbackModel` | 1 kHz | one real input `u`, one real output `y` | one loopback channel per signal |
+| Example | Model | Step | Signals |
+| --- | --- | --- | --- |
+| `loopback/` | `LoopbackModel` | 1 kHz | one real input `u`, one real output `y` |
 
 ## Run an example
 

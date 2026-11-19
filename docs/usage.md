@@ -62,7 +62,7 @@ pyfmi-interop generate --model-json examples/loopback/model.json \
 Generation emits a small C++17 project: `model_runtime.hpp`,
 `model_runtime.cpp`, `model_impl.hpp`, `bindings.cpp`, `model.json`, and
 `CMakeLists.txt`. The source contains typed signal members, value-reference
-accessors, publish/consume hooks for the bindings, the `user_step` hook, and the
+accessors, publish/consume hooks, the `user_step` hook, and the
 `pyfmi_interop_create_model` factory.
 
 `model_impl.hpp` holds the empty `user_step` hook and is the one generated file
@@ -77,27 +77,19 @@ pyfmi-interop build build/loopback
 
 The build configures the per-model `CMakeLists.txt` in
 `build/loopback/build/` and links the generated source against the static
-runtime. Pass adapter CMake definitions when a compile-gated adapter is
-intentionally enabled:
+runtime. The wire payload mode is selected the same way as the runtime build:
 
 ```bash
 cmake -S build/loopback -B build/loopback/out \
-  -DPYFMI_INTEROP_ENABLE_HLA=ON \
+  -DPYFMI_INTEROP_WIRE=protobuf \
   -DPYFMI_INTEROP_RUNTIME_INCLUDE_DIR=runtime/include \
   -DPYFMI_INTEROP_RUNTIME_LIBRARY=build/runtime/libpyfmi_interop_runtime.a
 cmake --build build/loopback/out
 ```
 
-The loopback adapter is always available. The other adapters remain stubs
-unless their option is ON and their protocol library is present; see
-`docs/adapters.md`.
-
-Enabling a gated adapter acquires the prebuilt upstream library from an
-installed package (vcpkg or system) first, then a `third_party/<lib>`
-submodule, then FetchContent with `-DPYFMI_INTEROP_ALLOW_FETCH=ON`. The vcpkg
-features are declared in `vcpkg.json`; ROS 2 comes from a system Jazzy
-installation only. The dependency table and exact commands are in
-`docs/adapters.md`.
+There is no protocol gate. The in-process loopback backend is always
+available, and byte transports carry the wire frame outside this repository;
+see `docs/wire.md`.
 
 ## Package
 
@@ -108,10 +100,10 @@ pyfmi-interop package build/loopback \
 ```
 
 Packaging writes `modelDescription.xml` and a deterministic `.fmu` archive. The
-archive carries the binary under `binaries/<platform>/` and the canonical
-`model.json`, `runtime.json`, and `adapters.json` under `resources/`. Equal
-inputs produce byte-identical archives: entries are sorted, file modes and
-timestamps are fixed, and the model GUID is stable.
+archive carries the binary and the wire schema bundle under
+`binaries/<platform>/`, and the canonical `model.json` and `runtime.json` under
+`resources/`. Equal inputs produce byte-identical archives: entries are sorted,
+file modes and timestamps are fixed, and the model GUID is stable.
 
 `package` needs both the generated model directory, for the IR and names, and
 the built shared library. The library must exist and match the model name.
@@ -120,7 +112,7 @@ the built shared library. The library must exist and match the model name.
 
 | Command | Purpose |
 | --- | --- |
-| `pyfmi-interop adapters` | List the adapter catalogue, kind, availability, and external requirement. |
+| `pyfmi-interop transports` | List the byte transport names (`udp`, `tcp`, `unix`). |
 | `pyfmi-interop inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
 | `pyfmi-interop generate --model-json PATH --out DIR` | Generate C++ from IR JSON. |
 | `pyfmi-interop generate --sysml PATH --out DIR [--step-size S] [--name NAME]` | Generate C++ from SysML v2. |
@@ -143,9 +135,9 @@ version.
   Rebuilding the same model keeps its identity.
 - No generation timestamp is written; archive timestamps are fixed, not read
   from the wall clock.
-- The archive places `modelDescription.xml` at the root, the binary under
-  `binaries/<platform>/`, and the IR and runtime descriptions under
-  `resources/`.
+- The archive places `modelDescription.xml` at the root, the binary and wire
+  schema bundle under `binaries/<platform>/`, and the IR and runtime
+  descriptions under `resources/`.
 - `ModelStructure/Outputs` lists the output variables in index order; optional
   FMI features that the IR does not author are absent rather than emitted as
   placeholders.

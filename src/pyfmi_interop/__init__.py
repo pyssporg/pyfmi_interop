@@ -1,8 +1,8 @@
-"""Realtime FMI generation, build and packaging for distributed simulation.
+"""Realtime FMI generation, build and packaging for the wire contract.
 
 The public surface is the IR (:mod:`pyfmi_interop.ir`), the wire envelope
-(:mod:`pyfmi_interop.wire`), the adapter catalogue
-(:mod:`pyfmi_interop.adapters`), the C++ generator
+(:mod:`pyfmi_interop.wire`), the schema emitter
+(:mod:`pyfmi_interop.schema`), the C++ generator
 (:mod:`pyfmi_interop.codegen`), the native build driver
 (:mod:`pyfmi_interop.builder`), the FMU packager
 (:mod:`pyfmi_interop.packaging`), and the ``pyfmi-interop`` CLI.
@@ -17,15 +17,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from . import adapters, builder, codegen, ir, native, packaging, schema, wire
-from .adapters import (
-    ADAPTERS,
-    AdapterDescriptor,
-    adapter_cmake_flags,
-    available_adapters,
-    get_adapter,
-    require_adapter,
-)
+from . import builder, codegen, ir, native, packaging, schema, wire
 from .builder import build_model
 from .codegen import generate_model
 from .ir import (
@@ -35,7 +27,6 @@ from .ir import (
     ProjectionError,
     RateGroup,
     Signal,
-    TransportBinding,
     assign_value_references,
     deterministic_guid,
     encode_string,
@@ -81,8 +72,6 @@ _LAZY_MODULES = {
 }
 
 __all__ = [
-    "ADAPTERS",
-    "AdapterDescriptor",
     "ChecksumError",
     "DataType",
     "DecodedFrame",
@@ -100,16 +89,12 @@ __all__ = [
     "RateGroup",
     "Signal",
     "TrailingBytes",
-    "TransportBinding",
     "TruncatedFrame",
     "UnsupportedWireVersion",
     "WIRE_VERSION",
     "WireError",
     "__version__",
-    "adapter_cmake_flags",
-    "adapters",
     "assign_value_references",
-    "available_adapters",
     "build_model",
     "build_schema",
     "builder",
@@ -120,7 +105,6 @@ __all__ = [
     "encode_string",
     "fingerprint",
     "generate_model",
-    "get_adapter",
     "ir",
     "model_from_dict",
     "model_id",
@@ -130,7 +114,6 @@ __all__ = [
     "packaging",
     "render_proto",
     "render_wire_json",
-    "require_adapter",
     "schema",
     "schema_entries",
     "sysml",

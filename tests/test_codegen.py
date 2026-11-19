@@ -16,7 +16,6 @@ from pyfmi_interop.ir import (
     ModelDefinition,
     RateGroup,
     Signal,
-    TransportBinding,
     deterministic_guid,
 )
 
@@ -42,18 +41,12 @@ def make_model() -> ModelDefinition:
         Signal("enable", 3, DataType.BOOLEAN, Direction.PARAMETER, initial=True),
         Signal("mode", 4, DataType.INTEGER, Direction.PARAMETER, initial=2),
     )
-    bindings = (
-        TransportBinding("speed", "hla", "Speed", Direction.OUTPUT),
-        TransportBinding("setpoint", "dis", "Setpoint", Direction.INPUT),
-        TransportBinding("label", "loopback", "Label", Direction.OUTPUT),
-    )
     rate_groups = (RateGroup("fast", 0.02, 0.01, ("setpoint",)),)
     return ModelDefinition(
         name="demo_model",
         guid=deterministic_guid("demo_model"),
         step_size_s=0.01,
         signals=signals,
-        bindings=bindings,
         rate_groups=rate_groups,
         description="codegen fixture",
     )
@@ -134,19 +127,15 @@ def test_read_and_write_enforce_direction_and_type(tmp_path):
     assert "value.type != pyfmi_interop::DataType::Integer" in write_section
 
 
-def test_publish_and_consume_only_map_bound_signals(tmp_path):
+def test_publish_and_consume_carry_only_the_step_time(tmp_path):
     target = generate_model(make_model(), tmp_path / "gen")
     source = (target / "bindings.cpp").read_text(encoding="utf-8")
     publish = source.split("::publish(")[1].split("::consume(")[0]
     consume = source.split("::consume(")[1]
 
-    # Bound readable signals: speed (1) and label (2).
-    assert "sample.values[1u]" in publish
-    assert "sample.values[2u]" in publish
-    assert "sample.values[5u]" not in publish
-    # Bound writable signals: setpoint (5) only.
-    assert "sample.values[5u]" in consume
-    assert "sample.values[1u]" not in consume
+    assert "sample.simulation_time = m_simulation_time;" in publish
+    assert "sample.values[" not in publish
+    assert "sample.values[" not in consume
 
 
 def test_factory_is_global_extern_c(tmp_path):
@@ -172,27 +161,25 @@ def test_user_step_hook_is_a_documented_noop(tmp_path):
     assert "#pragma once" in impl
 
 
-def test_cmake_exposes_runtime_and_adapter_cache_vars(tmp_path):
+def test_cmake_exposes_runtime_and_wire_cache_vars(tmp_path):
     target = generate_model(make_model(), tmp_path / "gen")
     cmake = (target / "CMakeLists.txt").read_text(encoding="utf-8")
 
     assert "PYFMI_INTEROP_RUNTIME_INCLUDE_DIR" in cmake
     assert "PYFMI_INTEROP_RUNTIME_LIBRARY" in cmake
     assert "PYFMI_INTEROP_CMAKE_DIR" in cmake
-    assert "PYFMI_INTEROP_SOURCE_DIR" in cmake
+    assert "PYFMI_INTEROP_SOURCE_DIR" not in cmake
     assert "add_library(demo_model SHARED model_runtime.cpp bindings.cpp)" in cmake
     assert 'OUTPUT_NAME "demo_model"' in cmake
     assert "CMAKE_CXX_STANDARD 17" in cmake
-    assert "PYFMI_INTEROP_ENABLE_HLA" in cmake
     assert 'include("${PYFMI_INTEROP_CMAKE_DIR}/wire.cmake")' in cmake
     assert "pyfmi_interop_resolve_wire()" in cmake
     assert "pyfmi_interop_configure_wire(demo_model)" in cmake
     assert "pyfmi_interop_wire_add_proto(" in cmake
     assert "demo_model.proto" in cmake
     assert "wire_conformance" in cmake
-    assert "PYFMI_INTEROP_ENABLE_DIS" in cmake
-    assert 'include("${PYFMI_INTEROP_CMAKE_DIR}/adapters.cmake")' in cmake
-    assert "pyfmi_interop_configure_adapter(hla demo_model)" in cmake
+    assert "PYFMI_INTEROP_ENABLE_" not in cmake
+    assert "adapters.cmake" not in cmake
     assert '"${PYFMI_INTEROP_RUNTIME_LIBRARY}"' in cmake
     assert "-Wl,--whole-archive" in cmake
     assert "-Wl,--no-whole-archive" in cmake
@@ -201,7 +188,6 @@ def test_cmake_exposes_runtime_and_adapter_cache_vars(tmp_path):
 
 
 def test_invalid_ir_is_rejected(tmp_path):
-    base = make_model()
     duplicate = ModelDefinition(
         name="bad_model",
         guid=deterministic_guid("bad_model"),
@@ -213,16 +199,6 @@ def test_invalid_ir_is_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="duplicate signal names"):
         generate_model(duplicate, tmp_path / "duplicate")
-
-    unknown_binding = ModelDefinition(
-        name="bad_binding",
-        guid=deterministic_guid("bad_binding"),
-        step_size_s=base.step_size_s,
-        signals=base.signals,
-        bindings=(TransportBinding("missing", "hla", "x", Direction.OUTPUT),),
-    )
-    with pytest.raises(ValueError, match="unknown signal"):
-        generate_model(unknown_binding, tmp_path / "binding")
 
     misaligned = ModelDefinition(
         name="bad_rate",
@@ -262,7 +238,6 @@ def test_generated_model_builds_with_native_runtime(tmp_path):
 
     cache = (tmp_path / "build" / "CMakeCache.txt").read_text(encoding="utf-8")
     assert "PYFMI_INTEROP_CMAKE_DIR:" in cache
-    assert "PYFMI_INTEROP_SOURCE_DIR:" in cache
 
     nm = shutil.which("nm")
     if sys.platform.startswith("linux") and nm is not None:

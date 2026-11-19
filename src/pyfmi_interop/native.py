@@ -59,7 +59,7 @@ def cmake_module_dir(repo_root: Path | None = None) -> Path:
     source_candidates.append(bundled)
 
     for candidate in source_candidates:
-        if (candidate / "adapters.cmake").is_file() and (candidate / "wire.cmake").is_file():
+        if (candidate / "wire.cmake").is_file():
             return candidate
 
     searched = ", ".join(str(path) for path in source_candidates)

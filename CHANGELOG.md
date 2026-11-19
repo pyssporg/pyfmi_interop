@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- Breaking: remove the adapter catalogue and protocol submodules; adapter names
+  are no longer accepted.
+
 ### Added
 
 - Git repository with pinned protocol submodules: OpenRTI (HLA, `fb454e6`),

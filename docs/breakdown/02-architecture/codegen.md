@@ -2,7 +2,7 @@
 id: INFO-004
 type: info
 title: Code generation
-summary: codegen emits a C++17 source tree and one CMakeLists.txt per model, with typed signals, binding hooks, user_step, and the factory.
+summary: codegen emits a C++17 source tree and one CMakeLists.txt per model, with typed signals, publish/consume hooks, user_step, and the factory.
 date: 2026-11-09
 status: current
 ---
@@ -14,7 +14,7 @@ per-model `CMakeLists.txt`.
 
 - **Signals:** typed members, value-reference accessors, initial values, and
   parameter propagation into the model state.
-- **Hooks:** publish and consume call the bound adapter; `user_step` is the only
+- **Hooks:** publish and consume carry the step frame; `user_step` is the only
   place the model's equations belong.
 - **Factory:** the generated unit defines `pyfmi_interop_create_model` and
   its destroy function.

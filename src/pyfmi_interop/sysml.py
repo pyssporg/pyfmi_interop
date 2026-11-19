@@ -32,11 +32,9 @@ metadata on a part definition, because ``pyfmi_sysml2`` rejects bare flat
 attributes as retired parameters, and on a port definition it also keeps the
 attribute out of the FMI variable set.
 
-Transport bindings use the ``transport``, ``channel`` and optional
-``transport_endpoint`` attributes.  A binding is emitted only when both
-``transport`` and ``channel`` are present; port attributes override component
-attributes.  ``transport`` must name an adapter in
-:mod:`pyfmi_interop.adapters`.
+Transport attributes are not interpreted: the repository carries bytes, not
+protocol bindings, so ``transport``, ``channel``, and ``transport_endpoint``
+remain author metadata only.
 
 String signals get ``DEFAULT_STRING_CAPACITY`` bytes so the runtime owns their
 storage and never allocates inside the step loop.  ``pyfmi_sysml2.Variable``
@@ -53,7 +51,6 @@ from pathlib import Path
 from typing import Any
 
 from pyfmi_interop import ir
-from pyfmi_interop.adapters import get_adapter
 
 __all__ = [
     "DEFAULT_STEP_SIZE_S",
@@ -139,7 +136,6 @@ def model_from_architecture(
     )
 
     signals: list[ir.Signal] = []
-    bindings: list[ir.TransportBinding] = []
     for component in selected:
         part = _part_definition(architecture, component.name)
         component_attributes = _attributes(part)
@@ -147,7 +143,6 @@ def model_from_architecture(
 
         for variable in component.variables:
             attributes = _variable_attributes(variable, component_attributes, port_attributes)
-            direction = _direction(variable.causality)
             rate_hz = _rate_hz_from_attributes(attributes)
             signals.append(
                 _signal_from_variable(
@@ -156,9 +151,6 @@ def model_from_architecture(
                     unit=_text_attribute(attributes, "unit"),
                 )
             )
-            binding = _binding_for_signal(variable.name, direction, attributes)
-            if binding is not None:
-                bindings.append(binding)
 
     return ir.ModelDefinition(
         name=model_name,
@@ -166,9 +158,6 @@ def model_from_architecture(
         step_size_s=step_size,
         realtime=realtime,
         signals=ir.assign_value_references(signals),
-        bindings=tuple(
-            sorted(bindings, key=lambda item: (item.signal, item.transport, item.channel))
-        ),
     )
 
 
@@ -392,30 +381,6 @@ def _signal_from_variable(
         unit=unit,
         initial=getattr(variable, "start", None),
         capacity=DEFAULT_STRING_CAPACITY if data_type is ir.DataType.STRING else 0,
-    )
-
-
-def _binding_for_signal(
-    signal_name: str,
-    direction: ir.Direction,
-    attributes: Mapping[str, object],
-) -> ir.TransportBinding | None:
-    transport = _text_attribute(attributes, "transport")
-    channel = _text_attribute(attributes, "channel")
-    if transport is None or channel is None:
-        return None
-    try:
-        get_adapter(transport)
-    except KeyError as error:
-        raise ValueError(f"signal {signal_name}: {error}") from error
-    endpoint = _text_attribute(attributes, "transport_endpoint")
-    config = {} if endpoint is None else {"endpoint": endpoint}
-    return ir.TransportBinding(
-        signal=signal_name,
-        transport=transport,
-        channel=channel,
-        direction=direction,
-        config=config,
     )
 
 

@@ -1,8 +1,3 @@
-#include "pyfmi_interop/runtime/adapters/dcp.hpp"
-#include "pyfmi_interop/runtime/adapters/dis.hpp"
-#include "pyfmi_interop/runtime/adapters/ed247.hpp"
-#include "pyfmi_interop/runtime/adapters/hla.hpp"
-#include "pyfmi_interop/runtime/adapters/ros2.hpp"
 #include "pyfmi_interop/runtime/loopback_transport.hpp"
 #include "pyfmi_interop/runtime/model_runtime.hpp"
 #include "pyfmi_interop/runtime/scheduler.hpp"
@@ -23,19 +18,6 @@ using namespace pyfmi_interop;
 int fail(const char* message) {
     std::cerr << message << '\n';
     return EXIT_FAILURE;
-}
-
-bool check_adapter_stub(Transport& transport) {
-    TransportConfig config;
-    config.name = "stub";
-    std::string error;
-    if (transport.available()) {
-        return false;
-    }
-    if (transport.initialize(config, error)) {
-        return false;
-    }
-    return !error.empty();
 }
 
 }  // namespace
@@ -156,17 +138,6 @@ int main() {
     if (!has_loopback || !transport_available("loopback") ||
         transport_available("does-not-exist")) {
         return fail("transport registry queries");
-    }
-
-    // Adapter stubs never act as available transports in this build.
-    HlaTransport hla;
-    DisTransport dis;
-    DcpTransport dcp;
-    Ros2Transport ros2;
-    Ed247Transport ed247;
-    if (!check_adapter_stub(hla) || !check_adapter_stub(dis) || !check_adapter_stub(dcp) ||
-        !check_adapter_stub(ros2) || !check_adapter_stub(ed247)) {
-        return fail("adapter stub must be unavailable with an explanatory error");
     }
 
     // Scheduler: fixed step count without realtime pacing.

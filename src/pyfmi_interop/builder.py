@@ -90,7 +90,6 @@ def build_model(
     library = resolve_runtime_library(runtime_library)
     include = resolve_runtime_include(runtime_include)
     cmake_module = native.cmake_module_dir(_REPO_ROOT)
-    source_root = cmake_module.parent
 
     configure = [
         cmake,
@@ -105,7 +104,6 @@ def build_model(
         [
             f"-DPYFMI_INTEROP_RUNTIME_INCLUDE_DIR={include}",
             f"-DPYFMI_INTEROP_RUNTIME_LIBRARY={library}",
-            f"-DPYFMI_INTEROP_SOURCE_DIR={source_root}",
             f"-DPYFMI_INTEROP_CMAKE_DIR={cmake_module}",
         ]
     )

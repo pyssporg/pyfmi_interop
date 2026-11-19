@@ -14,15 +14,13 @@ separate, one-way layers joined by the IR and the `ModelRuntime` interface.
 
 - **Python:** `ir.py`, `sysml.py`, `timing.py`, `codegen/`, `builder.py`,
   `packaging.py`, and `cli.py`.
-- **C++ runtime:** `runtime/` holds `ModelRuntime`, the fixed-step scheduler, and
-  the `Transport` registry; protocol mapping code is under
-  `runtime/src/adapters/`.
-- **Dependencies:** `cmake/adapters.cmake` and `vcpkg.json` acquire the prebuilt
-  upstream protocol libraries from an installed package, a `third_party/<lib>`
-  submodule, or FetchContent; the repository does not reimplement protocol
-  serialization.
+- **C++ runtime:** `runtime/` holds `ModelRuntime`, the fixed-step scheduler,
+  the wire codec, and the `Transport` registry.
+- **Wire:** `src/pyfmi_interop/wire/`, `runtime/src/wire.cpp`, and `schema.py`
+  define the envelope and payload schema; byte transports carry the frame.
 - **Generated model:** one C++17 source tree per model with typed signals,
-  accessors, binding hooks, `user_step`, and `pyfmi_interop_create_model`.
+  accessors, publish/consume hooks, `user_step`, and
+  `pyfmi_interop_create_model`.
 - **Flow:** SysML or IR JSON to IR, to generated C++ and CMake, to a native
   build, to an FMI 2.0 CoSimulation `.fmu`.
 - **Ingestion:** `sysml.py` uses `pycps_sysml2` and `pyfmi_sysml2`; the IR stays

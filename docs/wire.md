@@ -13,6 +13,13 @@ payload and has no protobuf dependency.
 * The codec never reads the clock. `sequence` and `timestamp_ns` are always
   caller-supplied.
 
+## Transport boundary
+
+A frame is transport-independent bytes. Byte transports (`udp`, `tcp`, `unix`)
+carry it; this repository ships the `Transport` interface and an in-process
+loopback backend for tests, not a protocol binding. Discovery, medium, and
+protocol semantics belong elsewhere and never change the envelope.
+
 ## Byte layout
 
 All multi-byte integers are unsigned little-endian.

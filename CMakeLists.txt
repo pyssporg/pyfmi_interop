@@ -3,11 +3,6 @@ cmake_minimum_required(VERSION 3.21)
 project(pyfmi_interop VERSION 0.2.0 LANGUAGES CXX)
 
 option(PYFMI_INTEROP_BUILD_TESTS "Build the C++ runtime tests" ON)
-option(PYFMI_INTEROP_ENABLE_HLA "Compile the IEEE 1516 HLA transport stub" OFF)
-option(PYFMI_INTEROP_ENABLE_DIS "Compile the IEEE 1278 DIS transport stub" OFF)
-option(PYFMI_INTEROP_ENABLE_DCP "Compile the ASAM X-DCP transport adapter" OFF)
-option(PYFMI_INTEROP_ENABLE_ROS2 "Compile the ROS 2 transport stub" OFF)
-option(PYFMI_INTEROP_ENABLE_ED247 "Compile the ED-247 transport stub" OFF)
 
 # Wire payload mode: protobuf (default when libprotobuf is found) or raw.
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)

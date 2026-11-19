@@ -28,7 +28,7 @@ public:
     virtual ~Transport() = default;
 
     // Called once before the first step.  Returns false and fills `error` when
-    // the adapter is unavailable or the configuration is rejected.
+    // the backend is unavailable or the configuration is rejected.
     virtual bool initialize(const TransportConfig& config, std::string& error) = 0;
 
     // Called once during shutdown.  Must not throw.
@@ -38,15 +38,14 @@ public:
     // build always returns false.
     virtual bool available() const noexcept = 0;
 
-    // Exchange one frame.  The realtime fast path must not allocate; adapters
-    // that need queues or serialization buffers allocate them in initialize().
+    // Exchange one frame.  The realtime fast path must not allocate; a backend
+    // that needs queues or serialization buffers allocates them in initialize().
     virtual bool send(const Sample& sample, std::string& error) = 0;
     virtual bool receive(Sample& sample, std::string& error) = 0;
 };
 
-// Adapter registry.  `name` must match a descriptor in
-// `pyfmi_interop.adapters.ADAPTERS`; unknown names return nullptr and fill
-// `error` with the list of known transports.
+// Transport registry.  Unknown names return nullptr and fill `error` with the
+// list of known transports.
 std::unique_ptr<Transport> make_transport(const std::string& name, std::string& error);
 
 std::vector<std::string> transport_names();

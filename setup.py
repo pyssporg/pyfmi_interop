@@ -59,11 +59,10 @@ class build_py(_build_py):
 
         cmake_target_dir = destination_dir / "cmake"
         cmake_target_dir.mkdir(parents=True, exist_ok=True)
-        for module_name in ("adapters.cmake", "wire.cmake"):
-            cmake_source = ROOT / "cmake" / module_name
-            if not cmake_source.is_file():
-                raise FileNotFoundError(f"CMake module not found: {cmake_source}")
-            shutil.copy2(cmake_source, cmake_target_dir / module_name)
+        cmake_source = ROOT / "cmake" / "wire.cmake"
+        if not cmake_source.is_file():
+            raise FileNotFoundError(f"CMake module not found: {cmake_source}")
+        shutil.copy2(cmake_source, cmake_target_dir / "wire.cmake")
 
 
 if _bdist_wheel is not None:

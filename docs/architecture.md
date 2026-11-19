@@ -11,7 +11,7 @@ below it knows the model's signals or equations.
 
 | Module | Responsibility |
 | --- | --- |
-| `src/pyfmi_interop/ir.py` | `ModelDefinition`, `Signal`, `RateGroup`, `TransportBinding`, value-reference assignment, canonical JSON. |
+| `src/pyfmi_interop/ir.py` | `ModelDefinition`, `Signal`, `RateGroup`, value-reference assignment, canonical JSON. |
 | `src/pyfmi_interop/sysml.py` | Ingestion through `pycps_sysml2` and `pyfmi_sysml2` into the IR. |
 | `src/pyfmi_interop/timing.py` | Rate and deadline validation, step alignment, and schedule construction. |
 | `src/pyfmi_interop/codegen/` | Emits the C++ source tree and the per-model `CMakeLists.txt`. |
@@ -27,26 +27,17 @@ below it knows the model's signals or equations.
   the scheduler, and the transports.
 - The fixed-step realtime scheduler — owns the clock, the step loop, deadline
   accounting, and the optional spin-wait.
-- `Transport` — the adapter interface and registry. The loopback adapter is
-  always built. HLA, DIS, DCP, ROS 2, and ED-247 are compile-gated stubs behind
-  `PYFMI_INTEROP_ENABLE_*`, default OFF. Protocol mapping code lives in
-  `runtime/src/adapters/` and binds the prebuilt upstream library; the
-  repository does not implement protocol serialization.
+- `Transport` — the byte-frame exchange interface and registry. The in-process
+  loopback backend is always built; protocol bindings are not part of this
+  repository.
 
-### Protocol dependency layer
+### Wire layer
 
-`cmake/adapters.cmake` resolves the enabled adapter libraries, and `vcpkg.json`
-declares the vcpkg features. The acquisition order is fixed:
-
-1. an installed package discovered by `find_package()` (vcpkg or system);
-2. a `third_party/<lib>` submodule checkout (`PYFMI_INTEROP_USE_SUBMODULES=ON`,
-   default ON);
-3. FetchContent of the pinned revision when `-DPYFMI_INTEROP_ALLOW_FETCH=ON`
-   (default OFF);
-4. a hard configuration error naming the upstream URL, pin, and instructions.
-
-ROS 2 is system-only: source `/opt/ros/jazzy/setup.bash`, and never vendor
-`rclcpp`. The dependency table and exact commands are in `docs/adapters.md`.
+`src/pyfmi_interop/wire/` and `runtime/src/wire.cpp` implement the same
+length-delimited, CRC32-checked, version-tagged envelope. `schema.py` emits the
+protobuf payload schema and its `wire.json` descriptor. Byte transports carry
+the frame; discovery, medium, and protocol semantics are outside this
+repository.
 
 ### Generated model layer
 
@@ -55,7 +46,7 @@ Per model, codegen emits a small C++17 project (`model_runtime.hpp`,
 `CMakeLists.txt`) with:
 
 - typed signal members and value-reference accessors;
-- publish and consume hooks for the bound transport channels;
+- publish and consume hooks that carry the step frame;
 - the `user_step` hook, where the model's equations belong;
 - the global factory `pyfmi_interop_create_model` and its destroy function.
 
@@ -93,8 +84,8 @@ generated header, the runtime accessors, and the FMI variables cannot disagree.
   same frame every step.
 - **No allocation in the step path.** Numeric values are trivially copyable.
   String signals carry a fixed capacity, so the fast path performs no heap
-  traffic. Adapters allocate queues and serialization buffers in `initialize()`,
-  never in `send` or `receive`.
+  traffic. A transport backend allocates queues and serialization buffers in
+  `initialize()`, never in `send` or `receive`.
 - **Deadline and overrun accounting.** Every step has a deadline. The scheduler
   measures completion time, records overruns, and applies the configured policy:
   `Warn` keeps the original schedule, `Skip` re-anchors the next deadline, and
@@ -107,33 +98,23 @@ generated header, the runtime accessors, and the FMI variables cannot disagree.
   `ModelRuntime::step` on the caller's thread and creates no background
   thread.
 
-## Adapter gating
+## Transport boundary
 
-`src/pyfmi_interop/adapters.py` is the adapter catalogue. Each descriptor
-names the adapter, its CMake option, its C++ class, its external requirement,
-and its `AdapterDependency` metadata (acquisition, upstream, pin, license,
-CMake package and targets, submodule path). The gate rules:
-
-- an option OFF leaves a stub in the runtime; the package still links;
-- `available()` returns false on a stub, and `initialize()` fails with an
-  actionable error;
-- an option ON without the library fails at CMake configuration or adapter
-  initialization, with the missing dependency named;
-- the library comes from an installed package, a `third_party/<lib>` submodule,
-  or FetchContent with `-DPYFMI_INTEROP_ALLOW_FETCH=ON`, in that order;
-- the repository never reimplements protocol serialization; mapping code lives
-  in `runtime/src/adapters/`;
-- DCP is ASAM X-DCP via DCPLib, not DDS;
-- there is no silent fallback to loopback or to another transport.
+The repository defines the wire frame, not a protocol. Byte transports
+(`udp`, `tcp`, `unix`) carry the frame; this tree ships the `Transport`
+interface, the always-built in-process loopback backend, and no protocol
+binding. A backend reports availability from `available()`; an unknown name or
+unavailable backend surfaces an error rather than substituting another
+transport.
 
 ## Generated versus runtime boundary
 
 | Owned by the generator | Owned by the runtime | Owned by the user |
 | --- | --- | --- |
 | signal members and accessors | `ModelRuntime`, scheduler, `Transport` registry | `user_step` equations |
-| binding publish/consume hooks | loopback frames and adapter lifecycle | adapter configuration values |
+| publish/consume hooks | loopback frames and transport lifecycle | transport configuration values |
 | factory and CMakeLists | FMI facade and deadline accounting | model parameters and initial values |
-| FMI XML and archive | static runtime and headers | transport channel names in the IR |
+| FMI XML and archive | static runtime and headers | — |
 
 Generated sources are build output, with one exception: `model_impl.hpp` holds
 the `user_step` hook and is the only generated file meant to be edited. Change

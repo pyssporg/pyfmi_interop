@@ -12,7 +12,7 @@ status: current
 Tests are organized by the artifact they can break, not by module; each level
 owns a distinct fault class.
 
-- **static:** layering, the single adapter catalogue, and fixture or provenance
+- **static:** layering, the single wire contract, and fixture or provenance
   rules that hold without executing the package.
 - **unit:** one object's behaviour, no artifact written; the IR validation and
   timing rules are asserted directly.

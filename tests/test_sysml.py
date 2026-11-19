@@ -88,34 +88,6 @@ def test_string_signals_get_capacity_and_initial_value() -> None:
     assert string_signal.rate_hz == 10.0
 
 
-def test_transport_binding_requires_transport_and_channel() -> None:
-    attributes = {
-        "transport": _Attribute("loopback"),
-        "channel": _Attribute("telemetry"),
-        "transport_endpoint": _Attribute("udp://239.0.0.1:5000"),
-    }
-
-    binding = sysml._binding_for_signal("sig", ir.Direction.OUTPUT, attributes)
-
-    assert binding is not None
-    assert binding.transport == "loopback"
-    assert binding.channel == "telemetry"
-    assert binding.direction is ir.Direction.OUTPUT
-    assert binding.config == {"endpoint": "udp://239.0.0.1:5000"}
-
-    assert sysml._binding_for_signal("sig", ir.Direction.INPUT, {"transport": "loopback"}) is None
-    assert sysml._binding_for_signal("sig", ir.Direction.INPUT, {"channel": "c"}) is None
-
-
-def test_unknown_transport_is_rejected() -> None:
-    with pytest.raises(ValueError, match="unknown adapter"):
-        sysml._binding_for_signal(
-            "sig",
-            ir.Direction.INPUT,
-            {"transport": "carrier-pigeon", "channel": "c"},
-        )
-
-
 def test_model_name_sanitization() -> None:
     assert sysml._identifier("Demo") == "Demo"
     assert sysml._identifier("Demo.Package") == "Demo_Package"
@@ -171,7 +143,7 @@ def _architecture() -> object:
     return architecture
 
 
-def test_model_from_architecture_maps_signals_rates_units_and_bindings() -> None:
+def test_model_from_architecture_maps_signals_rates_and_units() -> None:
     model = sysml.model_from_architecture(_architecture())
 
     assert model.name == "Demo"
@@ -188,12 +160,6 @@ def test_model_from_architecture_maps_signals_rates_units_and_bindings() -> None
     assert value.direction is ir.Direction.OUTPUT
     assert value.rate_hz == pytest.approx(10.0)
     assert value.unit == "V"
-
-    assert [binding.signal for binding in model.bindings] == ["out.label", "out.value"]
-    for binding in model.bindings:
-        assert binding.transport == "loopback"
-        assert binding.channel == "telemetry"
-        assert binding.config == {"endpoint": "udp://239.0.0.1:5000"}
 
 
 def test_model_from_architecture_honours_explicit_step_size_and_name() -> None:

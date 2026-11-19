@@ -2,7 +2,7 @@
 
 The generator turns a :class:`~pyfmi_interop.ir.ModelDefinition` into a
 small, self-contained CMake project.  Every emitted byte is derived from the
-IR: signals are sorted by value reference, bindings by signal/transport/channel,
+IR: signals are sorted by value reference,
 and no timestamp or ambient value is written.  Two generations of the same IR
 therefore produce byte-identical trees.
 
@@ -390,78 +390,23 @@ def _render_model_impl(model: ModelDefinition) -> str:
 
 
 def _render_bindings(model: ModelDefinition) -> str:
-    signals = _ordered_signals(model)
-    bound_names = {binding.signal for binding in model.bindings}
-    publish_signals = [
-        signal
-        for signal in signals
-        if signal.name in bound_names and signal.direction.readable
-    ]
-    consume_signals = [
-        signal
-        for signal in signals
-        if signal.name in bound_names and signal.direction.writable
-    ]
-    publish_lines = "\n".join(_publish_statement(signal) for signal in publish_signals)
-    consume_lines = "\n".join(_consume_statement(signal) for signal in consume_signals)
-    if not publish_lines:
-        publish_lines = "    (void)sample;"
-    if not consume_lines:
-        consume_lines = "    (void)sample;"
     return (
         _HEADER
         + f"// Model: {model.name}\n"
         + f"// IR fingerprint: {fingerprint(model)}\n"
         + "//\n"
-        + "// Only signals with a TransportBinding are packed or unpacked here.  The\n"
-        + "// Sample frame is indexed directly by value reference and is preallocated\n"
-        + "// by the scheduler.\n"
+        + "// No protocol binding is configured.  The preallocated sample still\n"
+        + "// carries the simulation time so the wire encoder sees one frame per step.\n"
         + '#include "model_runtime.hpp"\n'
         + "\n"
         + "void GeneratedModelRuntime::publish(pyfmi_interop::Sample& sample) const {\n"
         + "    sample.simulation_time = m_simulation_time;\n"
-        + publish_lines
-        + "\n"
+        + "    (void)sample;\n"
         + "}\n"
         + "\n"
         + "void GeneratedModelRuntime::consume(const pyfmi_interop::Sample& sample) {\n"
-        + consume_lines
-        + "\n"
+        + "    (void)sample;\n"
         + "}\n"
-    )
-
-
-def _publish_statement(signal: Signal) -> str:
-    vr = signal.value_reference
-    return (
-        f"    if ({vr}u < sample.values.size() && {vr}u < sample.valid.size()) {{\n"
-        + f"        sample.values[{vr}u] = {_value_expression(signal)};\n"
-        + f"        sample.valid[{vr}u] = 1u;\n"
-        + "    }"
-    )
-
-
-def _consume_statement(signal: Signal) -> str:
-    vr = signal.value_reference
-    member = _member(signal)
-    if signal.data_type is DataType.STRING:
-        assignment = (
-            f"            copy_bounded({member}.data(), {member}.size(), "
-            f"sample.values[{vr}u].string_value);"
-        )
-    elif signal.data_type is DataType.REAL:
-        assignment = f"            {member} = sample.values[{vr}u].real_value;"
-    elif signal.data_type is DataType.INTEGER:
-        assignment = f"            {member} = sample.values[{vr}u].integer_value;"
-    else:
-        assignment = f"            {member} = sample.values[{vr}u].boolean_value;"
-    return (
-        f"    if ({vr}u < sample.values.size() && {vr}u < sample.valid.size()\n"
-        + f"        && sample.is_valid({vr}u)\n"
-        + f"        && sample.values[{vr}u].type == {_cpp_data_type(signal)}) {{\n"
-        + assignment
-        + "\n"
-        + "    }"
     )
 
 

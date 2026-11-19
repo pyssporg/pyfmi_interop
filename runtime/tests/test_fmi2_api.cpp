@@ -358,7 +358,7 @@ int main() {
 
     fmi2FreeInstance(component);
 
-    // Transport: an explicitly requested but unavailable adapter must make
+    // Transport: an explicitly requested but unavailable backend must make
     // instantiate fail with a clear message.
     set_transport("does-not-exist");
     g_last_log.clear();

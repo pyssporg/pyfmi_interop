@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pyfmi-interop"
 dynamic = ["version"]
-description = "Turn SysML v2 FMU definitions into C++ realtime runtimes with HLA, DIS, DCP, ROS 2 and ED-247 transport adapters."
+description = "Turn SysML v2 FMU definitions into C++ realtime runtimes and one versioned wire format."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -16,14 +16,11 @@ authors = [
 keywords = [
   "fmi",
   "fmu",
-  "sysml-v2",
-  "realtime",
-  "hla",
-  "dis",
-  "dcp",
-  "ros2",
-  "ed247",
-  "co-simulation",
+    "sysml-v2",
+    "realtime",
+    "protobuf",
+    "wire-format",
+    "co-simulation",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

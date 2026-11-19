@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .adapters import adapter_cmake_flags, available_adapters
 from .builder import build_model
 from .codegen import generate_model
 from .ir import ModelDefinition, model_from_dict
@@ -21,6 +20,10 @@ from .packaging import package_fmu
 from .schema import write_schema
 
 __all__ = ["build_parser", "main"]
+
+#: Byte transports that carry a wire frame.  This repository defines the frame,
+#: not the transport; the names are listed so an operator can see the boundary.
+_BYTE_TRANSPORTS = ("udp", "tcp", "unix")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("adapters", help="List transport adapters.")
+    subparsers.add_parser("transports", help="List the byte transport names.")
 
     inspect_parser = subparsers.add_parser(
         "inspect",
@@ -65,16 +68,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_parser_.add_argument("model_dir", type=Path)
     build_parser_.add_argument("--build-dir", type=Path, default=None)
-    build_parser_.add_argument(
-        "--adapter",
-        action="append",
-        default=[],
-        metavar="NAME",
-        help=(
-            "Enable a transport adapter gate for this build (repeatable). "
-            "The matching PYFMI_INTEROP_ENABLE_* option is turned ON."
-        ),
-    )
 
     package_parser = subparsers.add_parser(
         "package",
@@ -105,8 +98,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
-    if args.command == "adapters":
-        _print_adapters()
+    if args.command == "transports":
+        _print_transports()
         return 0
     if args.command == "inspect":
         _print_model(_load_model_json(args.model_json))
@@ -121,8 +114,7 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         print(f"Generated model sources at {target}")
         return 0
     if args.command == "build":
-        cmake_args = adapter_cmake_flags(args.adapter)
-        library = build_model(args.model_dir, args.build_dir, cmake_args=cmake_args)
+        library = build_model(args.model_dir, args.build_dir)
         print(f"Built {library}")
         return 0
     if args.command == "package":
@@ -169,31 +161,10 @@ def _model_from_sysml(
     return builder(path, name=name, step_size_s=step_size)
 
 
-def _print_adapters() -> None:
-    rows: list[tuple[str, ...]] = [
-        ("name", "kind", "available", "experimental", "requires"),
-    ]
-    for descriptor in available_adapters():
-        rows.append(
-            (
-                descriptor.name,
-                descriptor.kind,
-                "yes" if _adapter_available(descriptor.name) else "no",
-                "yes" if descriptor.experimental else "no",
-                ", ".join(descriptor.requires) or "-",
-            )
-        )
-    widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
-    for row in rows:
-        cells = [cell.ljust(widths[index]) for index, cell in enumerate(row)]
-        print("  ".join(cells).rstrip())
-
-
-def _adapter_available(name: str) -> bool:
-    # The loopback adapter is always compiled in.  External adapters report
-    # their availability from the native runtime, which the Python layer cannot
-    # probe; an experimental adapter is therefore reported as unavailable here.
-    return name == "loopback"
+def _print_transports() -> None:
+    print("name")
+    for name in _BYTE_TRANSPORTS:
+        print(name)
 
 
 def _print_model(model: ModelDefinition) -> None:
@@ -213,15 +184,6 @@ def _print_model(model: ModelDefinition) -> None:
         print(
             f"  {signal.value_reference}: {signal.name} "
             f"({', '.join(details)})"
-        )
-    print(f"bindings: {len(model.bindings)}")
-    for binding in sorted(
-        model.bindings,
-        key=lambda item: (item.signal, item.transport, item.channel),
-    ):
-        print(
-            f"  {binding.signal} -> {binding.transport}:{binding.channel} "
-            f"({binding.direction.value})"
         )
     print(f"rate_groups: {len(model.rate_groups)}")
     for group in sorted(model.rate_groups, key=lambda item: item.name):

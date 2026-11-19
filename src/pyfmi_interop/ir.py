@@ -4,7 +4,7 @@ The IR is deliberately independent of SysML and of FMI.  Ingestion maps a
 SysML v2 architecture onto it (``sysml.py``), code generation consumes it
 (``codegen/``), and packaging serializes it next to the generated binary.  One
 IR means every downstream artifact sees the same signals, value references,
-rates, and transport bindings.
+and rates.
 
 Design rules carried by this module:
 
@@ -42,7 +42,6 @@ __all__ = [
     "Direction",
     "ProjectionError",
     "Signal",
-    "TransportBinding",
     "RateGroup",
     "ModelDefinition",
     "assign_value_references",
@@ -317,30 +316,6 @@ class Signal:
 
 
 @dataclass(frozen=True)
-class TransportBinding:
-    """Binds one signal to one adapter channel.
-
-    ``transport`` is an adapter name registered in :mod:`pyfmi_interop.adapters`.
-    ``channel`` is adapter specific: an HLA interaction/attribute name, a DIS
-    entity/attribute path, a DCP signal path, a ROS 2 topic, an ED247 stream, etc.
-    """
-
-    signal: str
-    transport: str
-    channel: str
-    direction: Direction
-    config: Mapping[str, str] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.signal:
-            raise ValueError("binding signal must not be empty")
-        if not self.transport:
-            raise ValueError("binding transport must not be empty")
-        if not self.channel:
-            raise ValueError("binding channel must not be empty")
-
-
-@dataclass(frozen=True)
 class RateGroup:
     """A set of signals stepped at ``period_s`` with a ``deadline_s`` budget."""
 
@@ -367,7 +342,6 @@ class ModelDefinition:
     step_size_s: float
     realtime: bool = True
     signals: tuple[Signal, ...] = ()
-    bindings: tuple[TransportBinding, ...] = ()
     rate_groups: tuple[RateGroup, ...] = ()
     metadata: Mapping[str, str] = field(default_factory=dict)
     description: str = ""
@@ -421,12 +395,6 @@ class ModelDefinition:
             seen_ids[signal.value_reference] = signal.name
 
         known = set(names)
-        for binding in self.bindings:
-            if binding.signal not in known:
-                raise ValueError(
-                    f"binding refers to unknown signal: {binding.signal}"
-                )
-
         grouped: set[str] = set()
         for group in self.rate_groups:
             if group.period_s < self.step_size_s - 1e-12:
@@ -521,7 +489,6 @@ def model_to_dict(model: ModelDefinition) -> dict[str, Any]:
     """Serialize to a JSON-compatible mapping (deterministic key order)."""
 
     payload = asdict(model)
-    payload["bindings"] = [dict(item) for item in payload["bindings"]]
     payload["metadata"] = dict(payload["metadata"])
     return payload
 
@@ -542,16 +509,6 @@ def model_from_dict(payload: Mapping[str, Any]) -> ModelDefinition:
         )
         for item in payload.get("signals", ())
     )
-    bindings = tuple(
-        TransportBinding(
-            signal=item["signal"],
-            transport=item["transport"],
-            channel=item["channel"],
-            direction=Direction(item["direction"]),
-            config=dict(item.get("config", {})),
-        )
-        for item in payload.get("bindings", ())
-    )
     rate_groups = tuple(
         RateGroup(
             name=item["name"],
@@ -567,7 +524,6 @@ def model_from_dict(payload: Mapping[str, Any]) -> ModelDefinition:
         step_size_s=float(payload["step_size_s"]),
         realtime=bool(payload.get("realtime", True)),
         signals=signals,
-        bindings=bindings,
         rate_groups=rate_groups,
         metadata=dict(payload.get("metadata", {})),
         description=payload.get("description", ""),

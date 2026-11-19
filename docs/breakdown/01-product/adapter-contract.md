@@ -1,34 +1,23 @@
 ---
 id: CP-003
 type: capability
-title: Transport adapter contract
-summary: One adapter catalogue drives the CLI and CMake gates; loopback is always built, other adapters are stubs that report unavailable.
+title: Byte transport contract
+summary: The repository defines the wire frame and one Transport interface; the loopback backend is always built, and no protocol binding ships.
 date: 2026-11-09
 status: current
 ---
 
-# Transport adapter contract
+# Byte transport contract
 
-An adapter is one descriptor plus one C++ implementation behind the `Transport`
-interface; loopback is always built and every other adapter is opt-in.
+A transport carries wire frames; it does not interpret the model interface.
 
-- **Catalogue:** `adapters.py` is the only adapter list; the CLI, CMake options,
-  vcpkg manifest, and documentation read it (`INFO-006`).
-- **Gate:** HLA, DIS, DCP, ROS 2, and ED-247 compile only with
-  `PYFMI_INTEROP_ENABLE_<NAME>=ON`; the default is OFF.
-- **Stub:** a gated-off adapter still links, `available()` returns false, and
-  `initialize()` fails with an actionable error.
-- **Dependency:** each non-loopback descriptor records acquisition, upstream,
-  pin, license, CMake package and targets, and submodule path. The build prefers
-  an installed package, then `third_party/<lib>`, then FetchContent with
-  `-DPYFMI_INTEROP_ALLOW_FETCH=ON`, then fails with the upstream URL. Protocol
-  serialization is never reimplemented; mapping code lives in
-  `runtime/src/adapters/`.
-- **DCP:** ASAM X-DCP (Distributed Co-Simulation Protocol) via DCPLib; not DDS.
-- **ROS 2:** system Jazzy installation only; `rclcpp` is never vendored.
-- **Frames:** exchange uses preallocated `Sample` frames; adapter buffers are
-  allocated in `initialize()`, never in `send` or `receive`.
-- **Failure:** an unknown transport, missing library, or rejected configuration
-  is reported; there is no silent fallback to another adapter.
-- **Binding:** each `TransportBinding` names a signal, adapter, channel, and
-  direction, and is validated against the IR before generation.
+- **Boundary:** the repository owns the envelope and the `Transport` interface,
+  not a protocol. There is no adapter catalogue or compile-gated protocol stub.
+- **Frames:** exchange uses the preallocated `Sample` frame; a backend allocates
+  queues or buffers in `initialize()`, never in `send` or `receive`.
+- **Loopback:** the in-process backend is always built and is the only backend
+  needed for single-process tests.
+- **Byte transports:** `udp`, `tcp`, and `unix` name the byte carriers in the
+  CLI boundary; framing is the only contract this repository defines for them.
+- **Failure:** an unknown or unavailable transport is reported; there is no
+  silent fallback to loopback or another backend.
