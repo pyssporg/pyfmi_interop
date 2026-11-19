@@ -11,5 +11,5 @@ The reason this project exists, the boundary it keeps, and the work it refuses.
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with `pb registers`. -->
-- **INFO-001** [Intent](intent.md) — pyfmi_interop turns a SysML v2 FMU definition into a generated C++17 realtime runtime with transport adapters, and refuses to own model equations or a master algorithm.
+- **INFO-001** [Intent](intent.md) — pyfmi_interop puts one model interface on one versioned wire format, with a Python end and a C++ end, and refuses to own semantics.
 <!-- pb:index:end -->

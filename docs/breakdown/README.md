@@ -1,6 +1,6 @@
 ---
 title: Product Breakdown — pyfmi_interop
-summary: Current-state record of why the distributed realtime FMU generator exists, the artifacts and contracts it promises, and how they are built, verified, and released.
+summary: Current-state record of why the wire-format contract exists, the artifacts it promises, and how they are built, verified, and released.
 ---
 
 # Product Breakdown — pyfmi_interop
@@ -16,7 +16,7 @@ promises, and how generation, packaging, verification, and release are organized
 - `03-implementation/` — the scheduler, the transport runtime, and the FMI facade.
 - `04-verification/` — the test ladder and its default gate.
 - `05-operation/` — local setup and release.
-- `06-evolution/` — the adapter roadmap.
+- `06-evolution/` — the wire-format roadmap.
 - the decision archive (`docs/archive/archive.zip`) — dated decisions, history
   only, read via `pb archive`.
 

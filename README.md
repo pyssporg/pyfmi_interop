@@ -1,9 +1,9 @@
 # pyfmi_interop
 
-Turn a SysML v2 definition of an FMU into an optimized C++17 realtime runtime
-with transport adapters, then package the result as an FMI 2.0 CoSimulation
-FMU. The SysML model defines the interface and the signal bindings; the model's
-equations stay in the generated `user_step` hook.
+`pyfmi_interop` owns bytes only: it takes a model interface and puts it on one
+versioned wire format, with a Python end and a C++ end. The payload is
+protobuf; the framing around it — length, CRC32, and format version — is this
+repository's own contract. The project does not interpret the model it carries.
 
 ## Architecture
 
@@ -22,14 +22,14 @@ Static runtime + model library
         ▼
 FMI 2.0 CoSimulation .fmu
 
-Transport adapters: loopback (always built), HLA, DIS, DCP, ROS 2, ED-247.
+Wire format: protobuf payload in length + CRC32 + format-version frames.
 ```
 
 The Python layer is split into `ir.py`, `sysml.py`, `timing.py`, `codegen/`,
 `builder.py`, `packaging.py`, and `cli.py`. The C++ layer in `runtime/` owns the
-`ModelRuntime` interface, the fixed-step realtime scheduler, and the `Transport`
-registry. Only the loopback adapter is always compiled; the remaining adapters
-are compile-gated stubs behind `PYFMI_INTEROP_ENABLE_*` and default to OFF.
+`ModelRuntime` interface, the fixed-step realtime scheduler, and the types the
+wire codec shares with the Python end. The adapter catalogue and its
+compile-gated stubs are removed by the wire-format work.
 
 ## Install
 
@@ -70,32 +70,19 @@ The example is a 1 kHz model with one real input (`u`), one real output (`y`),
 and one loopback binding. Run `pyfmi-interop <command> --help` for the
 exact options of an installed build.
 
-## Adapter status
+## Wire format
 
-| Adapter | CMake option | Status | External requirement |
-| --- | --- | --- | --- |
-| loopback | none, always built | stable | none |
-| HLA | `PYFMI_INTEROP_ENABLE_HLA` | stub, experimental | OpenRTI (IEEE 1516) |
-| DIS | `PYFMI_INTEROP_ENABLE_DIS` | stub, experimental | open-dis-cpp |
-| DCP | `PYFMI_INTEROP_ENABLE_DCP` | stub, experimental | DCPLib (ASAM X-DCP); not DDS |
-| ROS 2 | `PYFMI_INTEROP_ENABLE_ROS2` | stub, experimental | `rclcpp`, system Jazzy |
-| ED-247 | `PYFMI_INTEROP_ENABLE_ED247` | stub, experimental | Airbus ED247_LIBRARY |
-
-No external protocol library is a hard build dependency. A gated-off adapter
-still links and reports `available() == false`; enabling an option without the
-library fails at CMake configuration or adapter initialization, not silently.
-
-## Protocol libraries
-
-The repository does not reimplement protocol serialization. Each adapter binds
-the prebuilt upstream library through its public API: OpenRTI (HLA),
-open-dis-cpp (DIS), DCPLib (ASAM X-DCP), `rclcpp` (ROS 2), and the Airbus
-ED247_LIBRARY (ED-247). The dependency table, pins, licenses, CMake targets, and
-acquisition rules are in `docs/adapters.md`; the vcpkg feature manifest is
-`vcpkg.json`. Installed packages are preferred, then `third_party/<lib>`
-submodules, then FetchContent with `-DPYFMI_INTEROP_ALLOW_FETCH=ON`; ROS 2 is a
-system Jazzy installation only. The adapter bindings remain experimental
-skeletons, not completed mappings.
+- **Payload:** protobuf is the canonical schema for the model interface and the
+  sample values. The schema carries a version and changes by version, never in
+  place.
+- **Framing:** every message is length-delimited, CRC32-checked, and tagged
+  with the format version. Framing is the only layer this repository defines
+  beyond the payload.
+- **Ends:** a Python end and a C++ end share one set of conformance byte
+  vectors, and both must reproduce them.
+- **Non-goals:** HLA/RTI conformance, DCP, ED-247, ROS 2, DIS as a canonical
+  vocabulary, radio or medium models, time management, mission coordination,
+  the federation-endpoint role, and an adapter catalogue.
 
 ## Development
 
@@ -112,8 +99,9 @@ and `AGENTS.md` for the contributor rules.
 
 ## Documentation
 
-- `docs/architecture.md` — layers, data flow, realtime design, adapter gating.
-- `docs/adapters.md` — adapter catalogue, CMake options, and how to add one.
+- `docs/architecture.md` — layers, data flow, and realtime design.
+- `docs/adapters.md` — legacy adapter catalogue, removed when `docs/wire.md`
+  lands.
 - `docs/usage.md` — install, generate, build, package, and CLI reference.
 - `docs/breakdown/README.md` — current-state product breakdown.
 - `examples/README.md` — checked-in IR examples.

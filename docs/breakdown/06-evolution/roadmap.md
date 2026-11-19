@@ -1,27 +1,28 @@
 ---
 id: INFO-010
 type: info
-title: Adapter roadmap
-summary: The next work replaces compile-gated stubs with tested bindings, one adapter at a time, while loopback stays stable.
-date: 2026-11-09
+title: Wire format roadmap
+summary: The next work lands one protobuf wire format with length, CRC32, and version framing, its Python and C++ ends, and removes the adapter surface.
+date: 2026-11-19
 status: current
 ---
 
-# Adapter roadmap
+# Wire format roadmap
 
-The next work is to replace compile-gated adapter stubs with tested bindings,
-one adapter at a time, without changing the IR or codegen boundary.
+The next work lands the wire contract and removes the adapter surface it
+replaces; no adapter is carried forward.
 
-- **Loopback:** stays stable and remains the default and the test transport.
-- **HLA:** implement the RTI binding against a lightweight test federate; keep
-  the option OFF by default.
-- **DIS:** implement PDU exchange against a loopback or recorded packet oracle;
-  no external SDK is required.
-- **DCP:** implement the ASAM X-DCP binding with DCPLib, slave and master
-  modes; DDS is a separate transport and is not DCP. Keep the option OFF by
-  default.
-- **ROS 2:** bind rclcpp topics with callback exchange outside the step
-  deadline.
-- **ED-247:** bind configured streams with deadline-checked reads and writes.
-- **Gate:** each adapter lands with a CI job that is optional while its SDK is
-  absent; the default build still depends on no external SDK.
+- **Removal:** delete `src/pyfmi_interop/adapters.py`, `runtime/src/adapters/*`,
+  `cmake/adapters.cmake`, every `PYFMI_INTEROP_ENABLE_*` option, the
+  `third_party/{OpenRTI,DCPLib,ED247_LIBRARY}` submodules with their
+  `.gitmodules` entries, and the adapter catalogue; replace `docs/adapters.md`
+  with `docs/wire.md` and the `adapters` CLI verb with `transports`.
+- **Schema:** one versioned protobuf definition of the model interface and the
+  sample message, with generated Python and C++ bindings and no hand-written
+  codec.
+- **Framing:** length prefix, CRC32, and format version, specified once and
+  implemented identically at both ends.
+- **Conformance:** shared byte vectors both ends reproduce; a mismatch fails
+  the test rather than starting a negotiation.
+- **Gate:** the Python-only and C++ round trips pass in CI before the adapter
+  code is deleted.

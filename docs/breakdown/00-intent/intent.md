@@ -2,32 +2,34 @@
 id: INFO-001
 type: info
 title: Intent
-summary: pyfmi_interop turns a SysML v2 FMU definition into a generated C++17 realtime runtime with transport adapters, and refuses to own model equations or a master algorithm.
-date: 2026-11-09
+summary: pyfmi_interop puts one model interface on one versioned wire format, with a Python end and a C++ end, and refuses to own semantics.
+date: 2026-11-19
 status: current
 ---
 
 # Intent
 
-`pyfmi_interop` turns one SysML v2 definition of an FMU into an optimized
-C++17 realtime runtime, binds its signals to transport adapters, and packages
-the result as an FMI 2.0 CoSimulation FMU.
+`pyfmi_interop` puts one model interface on one versioned wire format: a
+Python end encodes it, a C++ end decodes it, and neither end interprets the
+model.
 
-- **Purpose:** make the interface, schedule, and transport bindings of a
-  realtime model generated and reproducible, instead of hand-written per
-  project.
-- **Interface, not equations:** SysML defines signals, types, rates, and
-  bindings. The model's equations belong in one user `user_step` hook.
-- **One runtime:** generated code implements `ModelRuntime`; the scheduler,
-  transport registry, and FMI facade are reusable and model-independent.
-- **Adapters are opt-in:** loopback is always built; HLA, DIS, DCP, ROS 2, and
-  ED-247 are compile-gated stubs behind `PYFMI_INTEROP_ENABLE_*`, default OFF.
-- **No SDK vendoring:** no external transport SDK is a hard build dependency.
-  Enabling an adapter without its SDK fails explicitly.
-- **No master algorithm:** the runtime is an FMI slave. It does not schedule
-  other FMUs, own a co-simulation master, or judge results.
-- **No model library:** the project does not supply equations, solver
-  integration, or a Modelica model.
+- **The job:** take the model interface — names, types, value references,
+  directions, and step metadata — and carry it across the wire in one format.
+  Nothing about what the values mean leaves the endpoint.
+- **Two ends:** a Python end and a C++ end meet at the byte layer and are
+  tested against the same conformance vectors, so the format has one reading.
+- **Canonical payload:** protobuf carries the model interface and the sample
+  values. The schema is the contract and changes by version, never in place.
+- **Framing is ours:** each message is length-delimited, CRC32-checked, and
+  tagged with a format version. Framing is the only layer this repository
+  defines beyond the payload; transport, medium, and discovery belong
+  elsewhere.
+- **No semantics:** the repository does not step, schedule, or judge models,
+  and does not translate between protocols. A model interface in equals the
+  same model interface out.
+- **Non-goals:** HLA/RTI conformance, DCP, ED-247, and ROS 2 bindings; DIS as a
+  canonical vocabulary; radio or medium models; time management; mission
+  coordination; the federation-endpoint role; and an adapter catalogue.
 
-The artifact crosses the boundary: generated C++, a static runtime, and a
-packaged `.fmu`. A tool that needs the IR consumes the canonical JSON.
+The artifact crosses the boundary: a protobuf schema, its generated Python and
+C++ bindings, and the framing code that carries them.
