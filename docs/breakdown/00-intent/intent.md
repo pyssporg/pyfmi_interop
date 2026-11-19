@@ -24,7 +24,7 @@ model.
   FMI `output` is consumed from it, and a `parameter` is never published.
 - **One message per part definition:** its fields are every signal field of
   every port, the field number is the value reference, and field order is the
-  `component_interface` order.
+  canonical signal-name order the value references are assigned in.
 - **Two ends:** a Python end and a C++ end meet at the byte layer and are
   tested against the same conformance vectors, so the format has one reading.
 - **Two registered seams:** serialization selects one schema authority per

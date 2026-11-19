@@ -102,7 +102,10 @@ ModelDefinition IR ─► serializer ─► framing ─► transport
 
 One message carries the whole part definition: every signal field of every
 port, with the field number equal to the value reference and field order equal
-to the `component_interface` order. Direction follows FMI causality:
+to the canonical signal-name order the value references are assigned in. That
+order is stable when ports are reordered in SysML; variable names, not value
+references, are what an SSP connector binds to. Direction follows FMI
+causality:
 
 | FMI causality | Adapter role | Wire direction |
 | --- | --- | --- |
