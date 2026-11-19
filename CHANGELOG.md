@@ -66,6 +66,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version, model id, step size, signals, rate groups), both deterministic and
   emitted next to the binary. The `schema` CLI verb writes the bundle from a
   `model.json`; `ProjectionError` fails packaging instead of dropping a signal.
+- C++ end of the wire envelope in `runtime/src/wire.cpp`: packed little-endian
+  header, CRC32/ISO-HDLC, and a portable SHA-256 model id that reproduces the
+  Python vectors for `demo` and `demo_model`. `encode_frame` / `decode_frame`
+  return typed `ErrorCode` failures mirroring the Python `WireError` taxonomy.
+- `PYFMI_INTEROP_WIRE` string option (`protobuf` or `raw`) in
+  `cmake/wire.cmake`, exposed as the `PYFMI_INTEROP_WIRE_MODE` cache variable,
+  target property, and compile definition. It defaults to `protobuf` when
+  libprotobuf and `protoc` are found, otherwise `raw`.
+- Generated models emit `<Model>.proto`, `wire.json`, and `model_wire.cpp`. In
+  `protobuf` mode the project compiles its schema with `protoc`, maps signal
+  values to and from `<Model>Payload` through the protobuf reflection API, and
+  builds a `wire_conformance` executable whose frames are byte-identical to
+  Python `wire.encode`.
+- Runtime wire tests cover the Python golden frames, round-trip, CRC, version,
+  truncation, and trailing-byte failures in both wire modes; a Python/C++
+  conformance test asserts frame byte identity.
 
 ### Changed
 

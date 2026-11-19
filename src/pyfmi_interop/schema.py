@@ -32,6 +32,7 @@ __all__ = [
     "WIRE_JSON_NAME",
     "SchemaBundle",
     "build_schema",
+    "payload_message_name",
     "proto_filename",
     "render_proto",
     "render_wire_json",
@@ -79,10 +80,17 @@ def proto_filename(model: ModelDefinition) -> str:
     return f"{model.name}.proto"
 
 
-def _payload_message(model: ModelDefinition) -> str:
+def payload_message_name(model: ModelDefinition) -> str:
+    """Return the payload message name declared in ``<Model>.proto``."""
+
     parts = [part for part in model.name.split("_") if part]
     camel = "".join(part[:1].upper() + part[1:] for part in parts)
     return f"{camel or 'Model'}Payload"
+
+
+# Kept as the internal spelling used below; the public name is
+# `payload_message_name` so codegen and the schema emitter cannot drift.
+_payload_message = payload_message_name
 
 
 def _projected_signals(model: ModelDefinition) -> tuple[Signal, ...]:

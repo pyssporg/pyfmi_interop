@@ -57,12 +57,13 @@ class build_py(_build_py):
             shutil.rmtree(headers_target)
         shutil.copytree(headers_source, headers_target)
 
-        cmake_source = ROOT / "cmake" / "adapters.cmake"
-        if not cmake_source.is_file():
-            raise FileNotFoundError(f"CMake adapter module not found: {cmake_source}")
-        cmake_target = destination_dir / "cmake" / "adapters.cmake"
-        cmake_target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(cmake_source, cmake_target)
+        cmake_target_dir = destination_dir / "cmake"
+        cmake_target_dir.mkdir(parents=True, exist_ok=True)
+        for module_name in ("adapters.cmake", "wire.cmake"):
+            cmake_source = ROOT / "cmake" / module_name
+            if not cmake_source.is_file():
+                raise FileNotFoundError(f"CMake module not found: {cmake_source}")
+            shutil.copy2(cmake_source, cmake_target_dir / module_name)
 
 
 if _bdist_wheel is not None:

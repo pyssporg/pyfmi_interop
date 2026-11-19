@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..ir import DataType, ModelDefinition, Signal, fingerprint, write_model_json
+from ..schema import build_schema, payload_message_name
 from .cmake import render_cmake
 
 __all__ = ["generate_model"]
@@ -38,8 +39,13 @@ def generate_model(model: ModelDefinition, out_dir: str | Path) -> Path:
     _write(target / "model_runtime.cpp", _render_runtime_cpp(model))
     _write(target / "model_impl.hpp", _render_model_impl(model))
     _write(target / "bindings.cpp", _render_bindings(model))
+    _write(target / "model_wire.cpp", _render_model_wire(model))
+    _write(target / "wire_conformance.cpp", _render_wire_conformance(model))
     _write(target / "CMakeLists.txt", _CMAKELISTS_PREFIX + render_cmake(model))
     write_model_json(model, target / "model.json")
+    bundle = build_schema(model)
+    (target / bundle.proto_name).write_bytes(bundle.proto)
+    (target / bundle.wire_json_name).write_bytes(bundle.wire_json)
     return target
 
 
@@ -184,6 +190,7 @@ def _render_runtime_hpp(model: ModelDefinition) -> str:
         + "#include <cstddef>\n"
         + "#include <cstdint>\n"
         + "#include <cstring>\n"
+        + "#include <string>\n"
         + "#include <string_view>\n"
         + "#include <vector>\n"
         + "\n"
@@ -221,6 +228,16 @@ def _render_runtime_hpp(model: ModelDefinition) -> str:
         + "const pyfmi_interop::Value& value) override;\n"
         + "    void publish(pyfmi_interop::Sample& sample) const override;\n"
         + "    void consume(const pyfmi_interop::Sample& sample) override;\n"
+        + "\n"
+        + "    // Wire hooks.  Protobuf builds define these in model_wire.cpp; the\n"
+        + "    // payload is the generated <Model>Payload message.\n"
+        + "    std::vector<std::uint8_t> encode_wire_frame(\n"
+        + "        std::uint32_t instance, std::uint64_t sequence,\n"
+        + "        std::uint64_t timestamp_ns, std::string& error) const;\n"
+        + "    bool decode_wire_frame(const std::vector<std::uint8_t>& frame,\n"
+        + "                           std::string& error);\n"
+        + "    bool encode_wire_payload(std::string& payload, std::string& error) const;\n"
+        + "    bool decode_wire_payload(std::string_view payload, std::string& error);\n"
         + "\n"
         + members
         + "\n"
@@ -445,6 +462,237 @@ def _consume_statement(signal: Signal) -> str:
         + assignment
         + "\n"
         + "    }"
+    )
+
+
+_VALUE_KIND = {
+    DataType.REAL: (1, "SetDouble", "GetDouble"),
+    DataType.INTEGER: (2, "SetInt64", "GetInt64"),
+    DataType.BOOLEAN: (3, "SetBool", "GetBool"),
+    DataType.STRING: (4, "SetString", "GetString"),
+}
+
+
+def _wire_encode_signal(signal: Signal) -> str:
+    kind, setter, _getter = _VALUE_KIND[signal.data_type]
+    member = _member(signal)
+    if signal.data_type is DataType.INTEGER:
+        expression = f"static_cast<std::int64_t>({member})"
+    elif signal.data_type is DataType.STRING:
+        expression = f"std::string({member}.data(), bounded_length({member}))"
+    else:
+        expression = member
+    return (
+        "    {\n"
+        f"        const google::protobuf::FieldDescriptor* field =\n"
+        f"            message.GetDescriptor()->FindFieldByNumber({signal.value_reference});\n"
+        '        if (field == nullptr) {\n'
+        f'            error = "payload field {signal.value_reference} is missing";\n'
+        "            return false;\n"
+        "        }\n"
+        "        google::protobuf::Message* value =\n"
+        "            message.GetReflection()->MutableMessage(&message, field);\n"
+        "        const google::protobuf::FieldDescriptor* kind =\n"
+        f"            value->GetDescriptor()->FindFieldByNumber({kind});\n"
+        f"        value->GetReflection()->{setter}(value, kind, {expression});\n"
+        "    }"
+    )
+
+
+def _wire_decode_signal(signal: Signal) -> str:
+    kind, _setter, getter = _VALUE_KIND[signal.data_type]
+    member = _member(signal)
+    if signal.data_type is DataType.STRING:
+        assignment = (
+            f"        copy_bounded({member}.data(), {member}.size(),\n"
+            f"                     value.GetReflection()->{getter}(value, kind));"
+        )
+    elif signal.data_type is DataType.INTEGER:
+        assignment = (
+            f"        {member} = static_cast<std::int32_t>(\n"
+            f"            value.GetReflection()->{getter}(value, kind));"
+        )
+    else:
+        assignment = f"        {member} = value.GetReflection()->{getter}(value, kind);"
+    return (
+        "    {\n"
+        f"        const google::protobuf::FieldDescriptor* field =\n"
+        f"            message.GetDescriptor()->FindFieldByNumber({signal.value_reference});\n"
+        '        if (field == nullptr) {\n'
+        f'            error = "payload field {signal.value_reference} is missing";\n'
+        "            return false;\n"
+        "        }\n"
+        "        const google::protobuf::Message& value =\n"
+        "            message.GetReflection()->GetMessage(message, field);\n"
+        "        const google::protobuf::FieldDescriptor* kind =\n"
+        f"            value.GetDescriptor()->FindFieldByNumber({kind});\n"
+        + assignment
+        + "\n"
+        "    }"
+    )
+
+
+def _render_model_wire(model: ModelDefinition) -> str:
+    signals = _ordered_signals(model)
+    bundle = build_schema(model)
+    proto_header = bundle.proto_name.removesuffix(".proto") + ".pb.h"
+    message = f"pyfmi_interop::wire::{payload_message_name(model)}"
+    records = ", ".join(
+        f"{{{signal.value_reference}u, {signal.data_type.number}u}}"
+        for signal in signals
+    )
+    encode_lines = "\n".join(_wire_encode_signal(signal) for signal in signals)
+    decode_lines = "\n".join(_wire_decode_signal(signal) for signal in signals)
+    if not encode_lines:
+        encode_lines = "    (void)message;"
+    if not decode_lines:
+        decode_lines = "    (void)message;"
+    return (
+        _HEADER
+        + f"// Model: {model.name}\n"
+        + f"// IR fingerprint: {fingerprint(model)}\n"
+        + "//\n"
+        + "// Payload layer for protobuf builds.  Signal values are mapped through\n"
+        + "// the emitted <Model>Payload message with the protobuf reflection API; no\n"
+        + "// protobuf byte layout is written by hand.  This translation unit is only\n"
+        + "// compiled when PYFMI_INTEROP_WIRE=protobuf.\n"
+        + '#include "model_runtime.hpp"\n'
+        + "\n"
+        + f'#include "{proto_header}"\n'
+        + '#include "pyfmi_interop/runtime/wire.hpp"\n'
+        + "\n"
+        + "#include <array>\n"
+        + "#include <cstddef>\n"
+        + "#include <cstdint>\n"
+        + "#include <limits>\n"
+        + "#include <string>\n"
+        + "#include <string_view>\n"
+        + "#include <vector>\n"
+        + "\n"
+        + "namespace {\n"
+        + "\n"
+        + f'constexpr char kModelName[] = {_string_literal(model.name)};\n'
+        + f"constexpr double kStepSize = {_float(model.step_size_s)};\n"
+        + "\n"
+        + "template <std::size_t N>\n"
+        + "std::size_t bounded_length(const std::array<char, N>& value) {\n"
+        + "    std::size_t length = 0;\n"
+        + "    while (length < N && value[length] != '\\0') {\n"
+        + "        ++length;\n"
+        + "    }\n"
+        + "    return length;\n"
+        + "}\n"
+        + "\n"
+        + "const std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize>& wire_model_id() {\n"
+        + "    static const std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize> id =\n"
+        + "        pyfmi_interop::wire::model_id(\n"
+        + "            std::string_view(kModelName), kStepSize,\n"
+        + "            std::vector<pyfmi_interop::wire::ModelIdSignal>{" + records + "});\n"
+        + "    return id;\n"
+        + "}\n"
+        + "\n"
+        + "}  // namespace\n"
+        + "\n"
+        + "bool GeneratedModelRuntime::encode_wire_payload(std::string& payload,\n"
+        + "                                                std::string& error) const {\n"
+        + f"    {message} message;\n"
+        + encode_lines
+        + "\n"
+        + "    payload = message.SerializeAsString();\n"
+        + "    if (payload.size() > std::numeric_limits<std::uint32_t>::max()) {\n"
+        + '        error = "payload exceeds uint32 length";\n'
+        + "        return false;\n"
+        + "    }\n"
+        + "    return true;\n"
+        + "}\n"
+        + "\n"
+        + "bool GeneratedModelRuntime::decode_wire_payload(std::string_view payload,\n"
+        + "                                                std::string& error) {\n"
+        + f"    {message} message;\n"
+        + "    if (payload.size() >\n"
+        + "        static_cast<std::size_t>(std::numeric_limits<int>::max())) {\n"
+        + '        error = "payload is too large to parse";\n'
+        + "        return false;\n"
+        + "    }\n"
+        + "    if (!message.ParseFromArray(payload.data(), static_cast<int>(payload.size()))) {\n"
+        + '        error = "payload is not a valid ' + payload_message_name(model) + ' message";\n'
+        + "        return false;\n"
+        + "    }\n"
+        + decode_lines
+        + "\n"
+        + "    return true;\n"
+        + "}\n"
+        + "\n"
+        + "std::vector<std::uint8_t> GeneratedModelRuntime::encode_wire_frame(\n"
+        + "    std::uint32_t instance, std::uint64_t sequence, std::uint64_t timestamp_ns,\n"
+        + "    std::string& error) const {\n"
+        + "    error.clear();\n"
+        + "    std::string payload;\n"
+        + "    if (!encode_wire_payload(payload, error)) {\n"
+        + "        return {};\n"
+        + "    }\n"
+        + "    pyfmi_interop::wire::EncodeResult result = pyfmi_interop::wire::encode_frame(\n"
+        + "        wire_model_id(), payload, instance, sequence, timestamp_ns);\n"
+        + "    if (!result) {\n"
+        + "        error = result.error.message;\n"
+        + "        return {};\n"
+        + "    }\n"
+        + "    return std::move(result.frame);\n"
+        + "}\n"
+        + "\n"
+        + "bool GeneratedModelRuntime::decode_wire_frame(\n"
+        + "    const std::vector<std::uint8_t>& frame, std::string& error) {\n"
+        + "    error.clear();\n"
+        + "    const std::string_view buffer(\n"
+        + "        reinterpret_cast<const char*>(frame.data()), frame.size());\n"
+        + "    pyfmi_interop::wire::DecodeResult result =\n"
+        + "        pyfmi_interop::wire::decode_frame(buffer);\n"
+        + "    if (!result) {\n"
+        + "        error = result.error.message;\n"
+        + "        return false;\n"
+        + "    }\n"
+        + "    if (result.frame.header.model_id != wire_model_id()) {\n"
+        + '        error = "model id mismatch";\n'
+        + "        return false;\n"
+        + "    }\n"
+        + "    const std::string_view payload(\n"
+        + "        reinterpret_cast<const char*>(result.frame.payload.data()),\n"
+        + "        result.frame.payload.size());\n"
+        + "    return decode_wire_payload(payload, error);\n"
+        + "}\n"
+    )
+
+
+def _render_wire_conformance(model: ModelDefinition) -> str:
+    return (
+        _HEADER
+        + f"// Model: {model.name}\n"
+        + "//\n"
+        + "// Prints the hex of one wire frame encoded from the reset state.  The\n"
+        + "// Python conformance test compares it with pyfmi_interop.wire.encode() over\n"
+        + "// the same protobuf payload.\n"
+        + '#include "model_runtime.hpp"\n'
+        + "\n"
+        + "#include <cstdio>\n"
+        + "#include <string>\n"
+        + "#include <vector>\n"
+        + "\n"
+        + "int main() {\n"
+        + "    GeneratedModelRuntime model;\n"
+        + "    model.reset();\n"
+        + "    std::string error;\n"
+        + "    const std::vector<std::uint8_t> frame =\n"
+        + "        model.encode_wire_frame(7u, 42u, 1700000000000000000ULL, error);\n"
+        + "    if (!error.empty() || frame.empty()) {\n"
+        + '        std::fprintf(stderr, "wire encode failed: %s\\n", error.c_str());\n'
+        + "        return 1;\n"
+        + "    }\n"
+        + "    for (const std::uint8_t byte : frame) {\n"
+        + '        std::printf("%02x", byte);\n'
+        + "    }\n"
+        + '    std::printf("\\n");\n'
+        + "    return 0;\n"
+        + "}\n"
     )
 
 

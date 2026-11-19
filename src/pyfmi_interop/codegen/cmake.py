@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from ..adapters import available_adapters
 from ..ir import ModelDefinition
+from ..schema import proto_filename
 
 __all__ = ["render_cmake"]
 
@@ -18,6 +19,7 @@ __all__ = ["render_cmake"]
 def render_cmake(model: ModelDefinition) -> str:
     """Return a deterministic ``CMakeLists.txt`` for ``model``."""
 
+    proto_name = proto_filename(model)
     adapter_options = [
         (
             descriptor.name,
@@ -100,6 +102,12 @@ set(
     "pyfmi-interop source root (contains third_party/ and cmake/)"
 )
 
+if(NOT PYFMI_INTEROP_CMAKE_DIR)
+    message(FATAL_ERROR "PYFMI_INTEROP_CMAKE_DIR is required")
+endif()
+include("${{PYFMI_INTEROP_CMAKE_DIR}}/wire.cmake")
+pyfmi_interop_resolve_wire()
+
 # Adapter gates.  They are plain boolean cache variables so the generated model
 # build accepts the same -D switches as the runtime build.
 {options}
@@ -124,6 +132,28 @@ target_include_directories(
     "${{CMAKE_CURRENT_SOURCE_DIR}}"
     "${{PYFMI_INTEROP_RUNTIME_INCLUDE_DIR}}"
 )
+pyfmi_interop_configure_wire({model.name})
+
+# In protobuf mode the emitted payload schema is compiled here and the generated
+# model maps signal values through the resulting message.  Raw mode keeps the
+# envelope opaque and does not compile model_wire.cpp.
+if(PYFMI_INTEROP_WIRE_MODE STREQUAL "protobuf")
+    target_sources({model.name} PRIVATE model_wire.cpp)
+    pyfmi_interop_wire_add_proto(
+        {model.name}
+        "${{CMAKE_CURRENT_SOURCE_DIR}}/{proto_name}"
+    )
+
+    add_executable(wire_conformance wire_conformance.cpp)
+    target_compile_features(wire_conformance PRIVATE cxx_std_17)
+    target_include_directories(
+        wire_conformance
+        PRIVATE
+        "${{CMAKE_CURRENT_SOURCE_DIR}}"
+        "${{PYFMI_INTEROP_RUNTIME_INCLUDE_DIR}}"
+    )
+    target_link_libraries(wire_conformance PRIVATE {model.name})
+endif()
 
 # Whole-archive keeps every runtime object, including the FMI facade and the
 # weak default model factory, in the packaged model library.

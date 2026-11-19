@@ -22,6 +22,8 @@ add_library(pyfmi_interop_runtime STATIC
     src/transport.cpp
     src/loopback_transport.cpp
     src/scheduler.cpp
+    src/wire.cpp
+    src/payload.cpp
     src/fmi2_cs_api.cpp
     src/adapters/hla.cpp
     src/adapters/dis.cpp
@@ -38,6 +40,7 @@ target_include_directories(pyfmi_interop_runtime
 
 target_compile_features(pyfmi_interop_runtime PUBLIC cxx_std_17)
 set_target_properties(pyfmi_interop_runtime PROPERTIES POSITION_INDEPENDENT_CODE ON)
+pyfmi_interop_configure_wire(pyfmi_interop_runtime)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(pyfmi_interop_runtime PRIVATE -Wall -Wextra)
@@ -64,6 +67,10 @@ target_include_directories(pyfmi_interop_fmi2_cs
 )
 
 target_compile_features(pyfmi_interop_fmi2_cs PUBLIC cxx_std_17)
+pyfmi_interop_configure_wire(pyfmi_interop_fmi2_cs)
+# The whole-archive linker input below is a generator expression, which does
+# not create a build dependency by itself; build the archive first.
+add_dependencies(pyfmi_interop_fmi2_cs pyfmi_interop_runtime)
 
 if(MSVC)
     target_link_options(
@@ -126,4 +133,13 @@ if(BUILD_TESTING AND PYFMI_INTEROP_BUILD_TESTS)
         target_compile_options(pyfmi_interop_fmi2_api_test PRIVATE -Wall -Wextra)
     endif()
     add_test(NAME pyfmi_interop_fmi2_api_test COMMAND pyfmi_interop_fmi2_api_test)
+
+    add_executable(pyfmi_interop_wire_test
+        tests/test_wire.cpp
+    )
+    target_link_libraries(pyfmi_interop_wire_test PRIVATE pyfmi_interop_runtime)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(pyfmi_interop_wire_test PRIVATE -Wall -Wextra)
+    endif()
+    add_test(NAME pyfmi_interop_wire_test COMMAND pyfmi_interop_wire_test)
 endif()

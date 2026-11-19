@@ -170,16 +170,90 @@ A third-party decoder needs only the packaged files: read `<Model>.proto` (or
 compile it once) to learn the payload message name and field numbers, then read
 `wire.json` to map each field id to its name, type, direction, rate, unit, and
 string capacity. No Python package, SysML model, or IR file is required. The
-`.proto` is a shipped artifact and is never regenerated during a build, so
-`protoc` is not a build dependency. A signal that cannot be projected (an
-illegal protobuf field identifier, a duplicate id, a non-finite number) raises
-`ProjectionError` during packaging; it is never silently dropped.
+`.proto` is a shipped artifact: a `raw` build never needs `protoc`, while a
+`protobuf` build consumes the same emitted file at configure/build time (see
+below). A signal that cannot be projected (an illegal protobuf field
+identifier, a duplicate id, a non-finite number) raises `ProjectionError`
+during packaging; it is never silently dropped.
 
-## C++ end (W6)
+## C++ end
 
-
-To match Python byte for byte, the C++ implementation must use the same
+The C++ implementation matches Python byte for byte. It uses the same
 `<4sHH8sIQQII` field order and widths, little-endian integers, `crc32` with the
 reflected IEEE 802.3 polynomial and init/xorout `0xFFFFFFFF`, the same model-id
 domain separator and `<d`/`<IB` record layout, magic `PFMI`, version `1`, and
-header size `48`. The CRC over `"123456789"` must be `0xCBF43926`.
+header size `48`. The CRC over `"123456789"` is `0xCBF43926`.
+
+### Runtime files
+
+| File | Purpose |
+| --- | --- |
+| `runtime/include/pyfmi_interop/runtime/wire.hpp` | `encode_frame` / `decode_frame`, `Header`, `Frame`, `ErrorCode` / `WireError`, `crc32`, `sha256`, `model_id` |
+| `runtime/src/wire.cpp` | Packed little-endian envelope, CRC32/ISO-HDLC table, portable SHA-256 (no OpenSSL) |
+| `runtime/include/pyfmi_interop/runtime/payload.hpp` | `PayloadCodec` interface plus the compile-time `payload_mode_name()` |
+| `runtime/src/payload.cpp` | Reports the selected payload mode to dependents |
+
+`ErrorCode` names mirror the Python taxonomy: `InvalidMagic`,
+`UnsupportedWireVersion`, `InvalidHeaderSize`, `TruncatedFrame`,
+`LengthOverflow`, `TrailingBytes`, `HeaderChecksumError`,
+`PayloadChecksumError`, and `FieldRangeError`, with `ChecksumError` as the
+shared CRC parent. `encode_frame`/`decode_frame` return a result carrying the
+frame and a `WireError`; they never throw. Decode checks in the same order as
+Python: truncation, magic, version, header size, header CRC32, declared length,
+trailing bytes, payload CRC32.
+
+The model id is derived with a small portable SHA-256 over the documented input.
+The C++ `model_id` reproduces the Python digest for `demo`
+(`ee78acea761957f0`) and `demo_model` (`983f897eb99c8464`); this parity is
+asserted in `runtime/tests/test_wire.cpp`.
+
+### Wire mode option
+
+`PYFMI_INTEROP_WIRE` is a string cache variable with values `protobuf` and
+`raw`. When it is empty (the default) CMake selects `protobuf` if libprotobuf
+and `protoc` are found, otherwise `raw`, and prints the choice. The resolved
+value is exposed as:
+
+* the `PYFMI_INTEROP_WIRE_MODE` cache variable;
+* the `PYFMI_INTEROP_WIRE_MODE` target property;
+* the public compile definition `PYFMI_INTEROP_WIRE_PROTOBUF=1` or
+  `PYFMI_INTEROP_WIRE_RAW=1`.
+
+The logic lives in `cmake/wire.cmake` and is included by the top-level
+`CMakeLists.txt` and by every generated model project. `protobuf` requires
+libprotobuf and `protoc`; selecting it without them is a configure error rather
+than a silent fallback. `raw` is fully supported and keeps the envelope
+payload-agnostic: caller bytes are carried unchanged.
+
+### Build both modes
+
+```bash
+cmake -S . -B build -DPYFMI_INTEROP_WIRE=protobuf
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+
+cmake -S . -B build-raw -DPYFMI_INTEROP_WIRE=raw
+cmake --build build-raw -j
+ctest --test-dir build-raw --output-on-failure
+```
+
+In `protobuf` mode a generated model compiles its emitted `<Model>.proto` with
+`protoc` into a `<model>_proto` static target and compiles `model_wire.cpp`.
+That translation unit maps the typed signal members to and from the generated
+`<Model>Payload` through the protobuf reflection API; the runtime never
+hand-rolls protobuf bytes. It also exposes `encode_wire_frame` /
+`decode_wire_frame`, which wrap the payload in the runtime envelope. In `raw`
+mode `model_wire.cpp` is not compiled.
+
+The generated project also builds `wire_conformance`, which prints the hex of
+one frame encoded from the reset state. `tests/test_wire_conformance.py` builds
+the same model, encodes the equivalent payload with the Python protobuf
+runtime, and asserts the two frames are byte-identical, for example:
+
+```text
+50464d4901003000983f897eb99c8464
+070000002a0000000000000000002a36fe9c9717
+24000000a3cc6f06
+df6a46d9
+0a0909000000000000f83f1204220268691a021801220210042a09090000000000000000
+```

@@ -40,13 +40,13 @@ def bundled_library_path() -> Path:
 
 
 def bundled_cmake_dir() -> Path:
-    """CMake modules bundled into the wheel (``adapters.cmake`` lives here)."""
+    """CMake modules bundled into the wheel (``wire.cmake`` lives here)."""
 
     return Path(__file__).resolve().parent / "_runtime" / "cmake"
 
 
 def cmake_module_dir(repo_root: Path | None = None) -> Path:
-    """Return the directory holding the shared ``adapters.cmake`` module.
+    """Return the directory holding the shared CMake modules.
 
     A source checkout is preferred over the wheel copy so development builds
     use the current CMake logic.
@@ -59,12 +59,12 @@ def cmake_module_dir(repo_root: Path | None = None) -> Path:
     source_candidates.append(bundled)
 
     for candidate in source_candidates:
-        if (candidate / "adapters.cmake").is_file():
+        if (candidate / "adapters.cmake").is_file() and (candidate / "wire.cmake").is_file():
             return candidate
 
     searched = ", ".join(str(path) for path in source_candidates)
     raise FileNotFoundError(
-        f"cmake/adapters.cmake not found (searched: {searched})"
+        f"cmake modules not found (searched: {searched})"
     )
 
 

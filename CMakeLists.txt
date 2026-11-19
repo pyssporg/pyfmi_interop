@@ -9,6 +9,11 @@ option(PYFMI_INTEROP_ENABLE_DCP "Compile the ASAM X-DCP transport adapter" OFF)
 option(PYFMI_INTEROP_ENABLE_ROS2 "Compile the ROS 2 transport stub" OFF)
 option(PYFMI_INTEROP_ENABLE_ED247 "Compile the ED-247 transport stub" OFF)
 
+# Wire payload mode: protobuf (default when libprotobuf is found) or raw.
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+include(wire)
+pyfmi_interop_resolve_wire()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)

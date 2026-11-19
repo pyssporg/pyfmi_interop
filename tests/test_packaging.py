@@ -195,8 +195,8 @@ def test_missing_model_json_is_rejected(tmp_path):
 def test_native_cmake_module_prefers_source_tree(tmp_path):
     source = tmp_path / "repo"
     (source / "cmake").mkdir(parents=True)
-    module = source / "cmake" / "adapters.cmake"
-    module.write_text("# bundled adapter module\n", encoding="utf-8")
+    for name in ("adapters.cmake", "wire.cmake"):
+        (source / "cmake" / name).write_text(f"# bundled {name}\n", encoding="utf-8")
 
     assert native.cmake_module_dir(source) == source / "cmake"
 
