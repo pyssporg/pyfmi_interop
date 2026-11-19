@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
+import pyfmi_distributed
 from pyfmi_distributed import cli
 from pyfmi_distributed.codegen import generate_model
 from pyfmi_distributed.ir import (
@@ -95,6 +97,11 @@ def test_sysml_generation_names_the_sysml_extra(tmp_path, capsys, monkeypatch):
     def missing_module(name: str):
         raise ImportError("simulated missing optional dependency")
 
+    # The submodule may already be imported (and cached on the package) by an
+    # earlier test; drop both caches so ``from . import sysml`` hits the patched
+    # ``__getattr__`` instead of the cached submodule.
+    monkeypatch.delattr(pyfmi_distributed, "sysml", raising=False)
+    monkeypatch.delitem(sys.modules, "pyfmi_distributed.sysml", raising=False)
     monkeypatch.setattr("pyfmi_distributed.__getattr__", missing_module)
 
     code = cli.main(

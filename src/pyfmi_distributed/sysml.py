@@ -1,7 +1,7 @@
 """Ingestion of a SysML v2 architecture into the realtime execution IR.
 
 The SysML dialect itself is owned by :mod:`pycps_sysml2`; the FMI variable
-reduction is owned by :mod:`pyfmi_sysml2.interface`.  This module only maps
+reduction is owned by :mod:`pyfmi_sysml2.core`.  This module only maps
 that reduction onto :mod:`pyfmi_distributed.ir`, so parsing is never
 re-implemented here.  Both packages are optional dependencies: importing this
 module works without them, calling :func:`load_model` or
@@ -178,7 +178,7 @@ def model_from_architecture(
 def _require_sysml():
     try:
         import pycps_sysml2
-        from pyfmi_sysml2.interface import components, resolve_system
+        from pyfmi_sysml2.core import components, resolve_system
     except ImportError as error:
         raise RuntimeError(f"SysML ingestion requires {_SYSML_EXTRA}") from error
     return pycps_sysml2, components, resolve_system
