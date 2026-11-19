@@ -27,17 +27,19 @@ below it knows the model's signals or equations.
   the scheduler, and the transports.
 - The fixed-step realtime scheduler — owns the clock, the step loop, deadline
   accounting, and the optional spin-wait.
-- `Transport` — the byte-frame exchange interface and registry. The in-process
-  loopback backend is always built; protocol bindings are not part of this
-  repository.
+- `Transport` — the byte-frame exchange interface and registry. Loopback, UDP,
+  and TCP are selected by name at run time; protocol bindings are not part of
+  this repository.
 
 ### Wire layer
 
 `src/pyfmi_interop/wire/` and `runtime/src/wire.cpp` implement the same
-length-delimited, CRC32-checked, version-tagged envelope. `schema.py` emits the
-protobuf payload schema and its `wire.json` descriptor. Byte transports carry
-the frame; discovery, medium, and protocol semantics are outside this
-repository.
+length-delimited, CRC32-checked, version-tagged envelope, the single framing
+authority. Serialization is a registered seam with one schema authority per
+backend: `schema.py` emits the canonical protobuf payload schema and its
+`wire.json` descriptor, and `packed` is the second backend. Wire version 2
+carries `payload_format` in the envelope, so one framing layer serves both.
+Discovery, medium, and protocol semantics are outside this repository.
 
 ### Generated model layer
 
@@ -49,6 +51,9 @@ Per model, codegen emits a small C++17 project (`model_runtime.hpp`,
 - publish and consume hooks that carry the step frame;
 - the `user_step` hook, where the model's equations belong;
 - the global factory `pyfmi_interop_create_model` and its destroy function.
+
+The adapter variant emits the same interface publication and consumes the
+corresponding wire direction, but carries no `user_step` and no equations.
 
 ### Wheel layer
 
@@ -73,6 +78,37 @@ IR JSON (model.json)┘                                      │
 The IR is the only hand-off between ingestion, codegen, and packaging. Each
 downstream stage reads the same signal order and value references, so the
 generated header, the runtime accessors, and the FMI variables cannot disagree.
+
+## Adapter models and the wire path
+
+The same part definition that yields the realtime model also yields an adapter
+model. The adapter carries values on and off the byte transport; it has no
+equations and no `user_step`. Its path has four layers:
+
+```text
+ModelDefinition IR ─► serializer ─► framing ─► transport
+```
+
+- **Serializer — compile-time lifetime.** The backend is chosen when the
+  adapter is generated and compiled into it, one schema authority per backend:
+  protobuf canonical, `packed` second. This is the dependency boundary.
+- **Framing — one authority.** Every backend shares the length-delimited,
+  CRC32-checked, version-tagged envelope; wire version 2 adds `payload_format`
+  to it. Field numbers are append-only and the reserved range stays reserved.
+- **Transport — run-time lifetime.** Loopback, UDP, and TCP are registered by
+  name and resolved when the adapter runs. This is the deployment boundary:
+  endpoints come from the environment or a manifest, never SSD/SSP content, so
+  an SSP stays portable.
+
+One message carries the whole part definition: every signal field of every
+port, with the field number equal to the value reference and field order equal
+to the `component_interface` order. Direction follows FMI causality:
+
+| FMI causality | Adapter role | Wire direction |
+| --- | --- | --- |
+| `input` | publish | out |
+| `output` | consume | in |
+| `parameter` | none | never published |
 
 ## Realtime design
 
@@ -101,11 +137,12 @@ generated header, the runtime accessors, and the FMI variables cannot disagree.
 ## Transport boundary
 
 The repository defines the wire frame, not a protocol. Byte transports
-(`udp`, `tcp`, `unix`) carry the frame; this tree ships the `Transport`
-interface, the always-built in-process loopback backend, and no protocol
-binding. A backend reports availability from `available()`; an unknown name or
-unavailable backend surfaces an error rather than substituting another
-transport.
+(`loopback`, `udp`, `tcp`) carry the frame; this tree ships the `Transport`
+interface and those registered backends, and no protocol binding. A transport
+is selected at run time by name and reports availability from `available()`; an
+unknown name or unavailable backend surfaces an error rather than substituting
+another transport. Endpoints are deployment data — environment or manifest —
+never SSD/SSP content, so a packaged SSP stays portable.
 
 ## Generated versus runtime boundary
 

@@ -60,8 +60,15 @@ def test_assign_value_references_starts_at_one_in_canonical_order() -> None:
     _model(*assigned).validate()
 
 
-@pytest.mark.parametrize("name", ["a.b", "a b", "a__b", "1a"])
-def test_non_proto_field_names_are_rejected(name: str) -> None:
+@pytest.mark.parametrize("name", ["a.b", "a b", "a__b", "1a", "out.value[0]"])
+def test_interface_names_are_carried_by_the_ir(name: str) -> None:
+    # SysML/FMI names are interface names; the serialization backend maps them
+    # to its own identifier.  The IR only rejects names that cannot be carried.
+    _model(_signal(name)).validate()
+
+
+@pytest.mark.parametrize("name", ["bad\x00name", "bad\nname"])
+def test_names_with_control_characters_are_rejected(name: str) -> None:
     signal = _signal(name)
     with pytest.raises(ir.ProjectionError) as error:
         _model(signal).validate()

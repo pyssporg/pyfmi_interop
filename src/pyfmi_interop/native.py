@@ -12,17 +12,24 @@ from pathlib import Path
 
 __all__ = [
     "RUNTIME_LIBRARY_NAME",
+    "TRANSPORT_LIBRARY_NAME",
     "bundled_cmake_dir",
     "bundled_include_dir",
     "bundled_library_path",
+    "bundled_transport_library_path",
     "cmake_module_dir",
     "default_runtime_library_path",
+    "default_transport_library_path",
     "runtime_include_dirs",
     "runtime_library_name",
     "runtime_search_paths",
+    "transport_include_dirs",
+    "transport_library_name",
+    "transport_search_paths",
 ]
 
 RUNTIME_LIBRARY_NAME = "pyfmi_interop_runtime"
+TRANSPORT_LIBRARY_NAME = "pyfmi_interop_transport"
 
 
 def runtime_library_name() -> str:
@@ -31,12 +38,22 @@ def runtime_library_name() -> str:
     return f"lib{RUNTIME_LIBRARY_NAME}.a"
 
 
+def transport_library_name() -> str:
+    if sys.platform == "win32":
+        return f"{TRANSPORT_LIBRARY_NAME}.lib"
+    return f"lib{TRANSPORT_LIBRARY_NAME}.a"
+
+
 def bundled_include_dir() -> Path:
     return Path(__file__).resolve().parent / "_runtime" / "include"
 
 
 def bundled_library_path() -> Path:
     return Path(__file__).resolve().parent / "_runtime" / runtime_library_name()
+
+
+def bundled_transport_library_path() -> Path:
+    return Path(__file__).resolve().parent / "_runtime" / transport_library_name()
 
 
 def bundled_cmake_dir() -> Path:
@@ -92,6 +109,43 @@ def runtime_include_dirs(repo_root: Path | None = None) -> list[Path]:
         candidates.append(bundled)
     if repo_root is not None:
         source_include = Path(repo_root) / "runtime" / "include"
+        if source_include.is_dir():
+            candidates.append(source_include)
+    return candidates
+
+
+def default_transport_library_path(repo_root: Path) -> Path:
+    """Static transport library produced by the top-level CMake build.
+
+    The build writes every archive into ``build/runtime`` (the top-level
+    ``CMAKE_ARCHIVE_OUTPUT_DIRECTORY``), while ``build/transport`` is kept as
+    the conventional location for a build that overrides it.
+    """
+
+    return Path(repo_root) / "build" / "transport" / transport_library_name()
+
+
+def transport_search_paths(repo_root: Path | None = None) -> list[Path]:
+    """Return candidate transport library paths in precedence order."""
+
+    candidates = [bundled_transport_library_path()]
+    if repo_root is not None:
+        candidates.append(default_transport_library_path(Path(repo_root)))
+        candidates.append(
+            Path(repo_root) / "build" / "runtime" / transport_library_name()
+        )
+    return candidates
+
+
+def transport_include_dirs(repo_root: Path | None = None) -> list[Path]:
+    """Return include directories that expose ``pyfmi_interop/transport/*``."""
+
+    candidates: list[Path] = []
+    bundled = bundled_include_dir()
+    if (bundled / "pyfmi_interop" / "transport").is_dir():
+        candidates.append(bundled)
+    if repo_root is not None:
+        source_include = Path(repo_root) / "transport" / "include"
         if source_include.is_dir():
             candidates.append(source_include)
     return candidates

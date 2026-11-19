@@ -12,8 +12,8 @@
 namespace {
 
 using pyfmi_interop::wire::ErrorCode;
-using pyfmi_interop::wire::Frame;
 using pyfmi_interop::wire::ModelIdSignal;
+using pyfmi_interop::wire::PayloadFormat;
 
 int fail(const char* message) {
     std::cerr << message << '\n';
@@ -46,8 +46,13 @@ void write_u32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32
 // Recompute the header CRC after a deliberate field mutation, so the next
 // check reached is the one the test targets.
 void refresh_header_crc(std::vector<std::uint8_t>& bytes) {
-    const std::uint32_t crc = pyfmi_interop::wire::crc32(bytes.data(), 44);
-    write_u32(bytes, 44, crc);
+    const std::uint32_t crc = pyfmi_interop::wire::crc32(bytes.data(), 52);
+    write_u32(bytes, 52, crc);
+}
+
+ErrorCode decode_error(const std::vector<std::uint8_t>& bytes) {
+    return pyfmi_interop::wire::decode_frame(std::string_view(
+        reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code;
 }
 
 std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize> demo_model_id() {
@@ -57,15 +62,15 @@ std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize> demo_model_id() {
 
 const std::string kModelIdHex = "ee78acea761957f0";
 const std::string kEmptyFrameHex =
-    "50464d4901003000ee78acea761957f0"
+    "50464d4902003800ee78acea761957f0"
     "070000002a0000000000000000002a36fe9c9717"
-    "0000000000000000"
-    "1880f4c4";
+    "00000000000000000000000000000000"
+    "6fef80de";
 const std::string kHelloFrameHex =
-    "50464d4901003000ee78acea761957f0"
+    "50464d4902003800ee78acea761957f0"
     "070000002a0000000000000000002a36fe9c9717"
-    "0500000086a61036"
-    "81c1ab1c"
+    "0500000086a610360000000000000000"
+    "c2b06e48"
     "68656c6c6f";
 
 std::string range_256() {
@@ -80,14 +85,15 @@ std::string range_256() {
 }
 
 const std::string kBoundaryFrameHex =
-    "50464d4901003000ee78acea761957f0"
+    "50464d4902003800ee78acea761957f0"
     "070000002a0000000000000000002a36fe9c9717"
-    "00010000738c0529"
-    "130ae3cc" + range_256();
+    "00010000738c05290000000000000000"
+    "673f2f81" + range_256();
 
-pyfmi_interop::wire::EncodeResult encode_demo(const std::string& payload) {
+pyfmi_interop::wire::EncodeResult encode_demo(const std::string& payload,
+                                              PayloadFormat format = PayloadFormat::Opaque) {
     return pyfmi_interop::wire::encode_frame(demo_model_id(), payload, 7, 42,
-                                            1700000000000000000ULL);
+                                             1700000000000000000ULL, format);
 }
 
 }  // namespace
@@ -98,7 +104,7 @@ int main() {
         return fail("crc32 check value");
     }
 
-    // Model-id parity with Python for two distinct models.
+    // Model-id derivation is unchanged from v1 (the domain separator stays v1).
     const auto demo_id = demo_model_id();
     if (to_hex(std::vector<std::uint8_t>(demo_id.begin(), demo_id.end())) != kModelIdHex) {
         return fail("model id demo");
@@ -111,12 +117,17 @@ int main() {
         return fail("model id demo_model");
     }
 
-    // Golden frames from the Python tests.
-    const pyfmi_interop::wire::EncodeResult empty = encode_demo("");
+    if (pyfmi_interop::wire::kHeaderSize != 56 ||
+        pyfmi_interop::wire::kWireVersion != 2) {
+        return fail("v2 constants");
+    }
+
+    // Golden v2 frames (payload format protobuf).
+    const auto empty = encode_demo("");
     if (!empty || to_hex(empty.frame) != kEmptyFrameHex) {
         return fail("golden empty frame");
     }
-    const pyfmi_interop::wire::EncodeResult hello = encode_demo("hello");
+    const auto hello = encode_demo("hello");
     if (!hello || to_hex(hello.frame) != kHelloFrameHex) {
         return fail("golden hello frame");
     }
@@ -124,27 +135,46 @@ int main() {
     for (int value = 0; value < 256; ++value) {
         boundary_payload.push_back(static_cast<char>(value));
     }
-    const pyfmi_interop::wire::EncodeResult boundary = encode_demo(boundary_payload);
+    const auto boundary = encode_demo(boundary_payload);
     if (!boundary || to_hex(boundary.frame) != kBoundaryFrameHex) {
         return fail("golden 256-byte frame");
     }
 
     // Round trip.
-    const pyfmi_interop::wire::DecodeResult decoded = pyfmi_interop::wire::decode_frame(
-        std::string_view(reinterpret_cast<const char*>(hello.frame.data()), hello.frame.size()));
+    const auto decoded = pyfmi_interop::wire::decode_frame(std::string_view(
+        reinterpret_cast<const char*>(hello.frame.data()), hello.frame.size()));
     if (!decoded) {
         return fail("decode hello");
     }
-    if (decoded.frame.header.model_id != demo_model_id() || decoded.frame.header.instance != 7 ||
-        decoded.frame.header.sequence != 42 ||
+    if (decoded.frame.header.model_id != demo_model_id() ||
+        decoded.frame.header.wire_version != 2 ||
+        decoded.frame.header.header_size != 56 ||
+        decoded.frame.header.instance != 7 || decoded.frame.header.sequence != 42 ||
         decoded.frame.header.timestamp_ns != 1700000000000000000ULL ||
-        decoded.frame.header.payload_length != 5 || decoded.frame.header.payload_crc32 != 0x3610A686u ||
+        decoded.frame.header.payload_length != 5 ||
+        decoded.frame.header.payload_crc32 != 0x3610A686u ||
+        decoded.frame.header.payload_format != PayloadFormat::Opaque ||
+        decoded.frame.header.flags != 0 || decoded.frame.header.reserved != 0 ||
         decoded.frame.payload != std::vector<std::uint8_t>{'h', 'e', 'l', 'l', 'o'}) {
         return fail("decoded header/payload");
     }
 
+    // Opaque and packed formats are carried and exposed unchanged.
+    for (const PayloadFormat format :
+         {PayloadFormat::Opaque, PayloadFormat::Protobuf, PayloadFormat::Packed}) {
+        const auto encoded = encode_demo("payload", format);
+        if (!encoded) {
+            return fail("encode explicit payload format");
+        }
+        const auto result = pyfmi_interop::wire::decode_frame(std::string_view(
+            reinterpret_cast<const char*>(encoded.frame.data()), encoded.frame.size()));
+        if (!result || result.frame.header.payload_format != format) {
+            return fail("decode explicit payload format");
+        }
+    }
+
     // Truncation below the fixed header.
-    for (const std::size_t length : {std::size_t{0}, std::size_t{1}, std::size_t{47}}) {
+    for (const std::size_t length : {std::size_t{0}, std::size_t{1}, std::size_t{55}}) {
         const auto truncated = pyfmi_interop::wire::decode_frame(std::string_view(
             reinterpret_cast<const char*>(hello.frame.data()), length));
         if (truncated.error.code != ErrorCode::TruncatedFrame) {
@@ -158,47 +188,61 @@ int main() {
         auto bytes = hello.frame;
         bytes[0] = 'X';
         refresh_header_crc(bytes);
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::InvalidMagic) {
+        if (decode_error(bytes) != ErrorCode::InvalidMagic) {
             return fail("bad magic");
         }
     }
     {
         auto bytes = hello.frame;
-        write_u16(bytes, 4, 2);
+        write_u16(bytes, 4, 1);
         refresh_header_crc(bytes);
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::UnsupportedWireVersion) {
-            return fail("bad wire version");
+        if (decode_error(bytes) != ErrorCode::UnsupportedWireVersion) {
+            return fail("v1 frame must be rejected");
         }
     }
     {
         auto bytes = hello.frame;
-        write_u16(bytes, 6, 47);
+        write_u16(bytes, 6, 48);
         refresh_header_crc(bytes);
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::InvalidHeaderSize) {
+        if (decode_error(bytes) != ErrorCode::InvalidHeaderSize) {
             return fail("bad header size");
         }
     }
     {
         auto bytes = hello.frame;
-        bytes[47] ^= 0x01u;
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::HeaderChecksumError) {
+        write_u16(bytes, 46, 1);
+        refresh_header_crc(bytes);
+        if (decode_error(bytes) != ErrorCode::NonZeroFlags) {
+            return fail("nonzero flags");
+        }
+    }
+    {
+        auto bytes = hello.frame;
+        write_u32(bytes, 48, 1);
+        refresh_header_crc(bytes);
+        if (decode_error(bytes) != ErrorCode::NonZeroReserved) {
+            return fail("nonzero reserved");
+        }
+    }
+    {
+        auto bytes = hello.frame;
+        write_u16(bytes, 44, 3);
+        refresh_header_crc(bytes);
+        if (decode_error(bytes) != ErrorCode::UnsupportedPayloadFormat) {
+            return fail("unknown payload format");
+        }
+    }
+    {
+        auto bytes = hello.frame;
+        bytes[16] ^= 0x01u;  // instance byte, CRC not refreshed
+        if (decode_error(bytes) != ErrorCode::HeaderChecksumError) {
             return fail("bad header CRC");
         }
     }
     {
         auto bytes = hello.frame;
         bytes.back() ^= 0x01u;
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::PayloadChecksumError) {
+        if (decode_error(bytes) != ErrorCode::PayloadChecksumError) {
             return fail("bad payload CRC");
         }
     }
@@ -206,44 +250,53 @@ int main() {
         auto bytes = hello.frame;
         write_u32(bytes, 36, 0xFFFFFFFFu);
         refresh_header_crc(bytes);
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::LengthOverflow) {
+        if (decode_error(bytes) != ErrorCode::LengthOverflow) {
             return fail("declared length beyond uint32");
         }
     }
     {
         auto bytes = hello.frame;
         bytes.pop_back();
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::LengthOverflow) {
+        if (decode_error(bytes) != ErrorCode::LengthOverflow) {
             return fail("frame shorter than declared");
         }
     }
     {
         auto bytes = hello.frame;
         bytes.push_back(0x00u);
-        if (pyfmi_interop::wire::decode_frame(std::string_view(
-                reinterpret_cast<const char*>(bytes.data()), bytes.size())).error.code !=
-            ErrorCode::TrailingBytes) {
+        if (decode_error(bytes) != ErrorCode::TrailingBytes) {
             return fail("trailing bytes");
         }
     }
+    {
+        auto bytes = hello.frame;
+        write_u16(bytes, 44, 9);
+        refresh_header_crc(bytes);
+        if (decode_error(bytes) != ErrorCode::UnsupportedPayloadFormat) {
+            return fail("encode/decode unknown format");
+        }
+        const auto encoded = encode_demo("x", static_cast<PayloadFormat>(9));
+        if (encoded || encoded.error.code != ErrorCode::FieldRangeError) {
+            return fail("encoder must reject an unknown payload format");
+        }
+    }
 
-    // Exactly one wire mode define, and the payload layer reports it.
+    // Exactly one wire mode define, the payload layer reports it, and the
+    // default envelope format follows the same selection.
 #if defined(PYFMI_INTEROP_WIRE_PROTOBUF) && defined(PYFMI_INTEROP_WIRE_RAW)
     return fail("both wire mode defines are set");
 #elif !defined(PYFMI_INTEROP_WIRE_PROTOBUF) && !defined(PYFMI_INTEROP_WIRE_RAW)
     return fail("no wire mode define is set");
 #elif defined(PYFMI_INTEROP_WIRE_PROTOBUF)
     if (std::strcmp(pyfmi_interop::wire::payload_mode_name(), "protobuf") != 0 ||
-        !pyfmi_interop::wire::protobuf_payloads()) {
+        !pyfmi_interop::wire::protobuf_payloads() ||
+        pyfmi_interop::wire::default_payload_format() != PayloadFormat::Protobuf) {
         return fail("protobuf mode reporting");
     }
 #else
     if (std::strcmp(pyfmi_interop::wire::payload_mode_name(), "raw") != 0 ||
-        pyfmi_interop::wire::protobuf_payloads()) {
+        pyfmi_interop::wire::protobuf_payloads() ||
+        pyfmi_interop::wire::default_payload_format() != PayloadFormat::Opaque) {
         return fail("raw mode reporting");
     }
 #endif

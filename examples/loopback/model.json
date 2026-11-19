@@ -24,7 +24,7 @@
       "name": "u",
       "rate_hz": 1000.0,
       "unit": null,
-      "value_reference": 0
+      "value_reference": 1
     },
     {
       "capacity": 0,
@@ -34,7 +34,7 @@
       "name": "y",
       "rate_hz": 1000.0,
       "unit": null,
-      "value_reference": 1
+      "value_reference": 2
     }
   ],
   "step_size_s": 0.001

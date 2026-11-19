@@ -25,6 +25,7 @@ from .ir import (
     model_to_dict,
 )
 from .schema import schema_entries
+from .serialization import get as get_serialization
 
 __all__ = [
     "package_fmu",
@@ -79,15 +80,26 @@ def package_fmu(
     extension = platform_library_extension()
     binary_arcname = f"binaries/{platform_dir}/{model.name}{extension}"
 
+    serialization = model.serialization or "protobuf"
+    backend = get_serialization(serialization)
     entries: dict[str, bytes] = {
         "modelDescription.xml": render_model_description(model).encode("utf-8"),
         "resources/model.json": _canonical_model_json(model),
-        "resources/runtime.json": _runtime_json(model, binary_arcname, platform_dir),
+        "resources/runtime.json": _runtime_json(
+            model, binary_arcname, platform_dir, serialization
+        ),
+        "resources/transport.json": _transport_json(),
         binary_arcname: binary.read_bytes(),
     }
-    # The schema travels with the binary: a third-party decoder needs only the
-    # packaged artifacts, never this Python package.
-    entries.update(schema_entries(model, prefix=f"binaries/{platform_dir}"))
+    # Only the selected backend's artifacts travel with the binary: a packed or
+    # opaque FMU never carries a protobuf schema it did not emit.
+    entries.update(
+        schema_entries(
+            model,
+            prefix=f"binaries/{platform_dir}",
+            serialization=backend.name,
+        )
+    )
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(
@@ -119,6 +131,7 @@ def _runtime_json(
     model: ModelDefinition,
     binary_arcname: str,
     platform_dir: str,
+    serialization: str,
 ) -> bytes:
     payload = {
         "modelName": model.name,
@@ -127,6 +140,26 @@ def _runtime_json(
         "fingerprint": fingerprint(model),
         "binary": binary_arcname,
         "platform": platform_dir,
+        "serialization": serialization,
+        "format_id": get_serialization(serialization).format_id,
+        "role": model.role,
+        "interface": model.interface,
+    }
+    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _transport_json() -> bytes:
+    """Consumer documentation for the transport the runtime reads from env."""
+
+    payload = {
+        "default": "loopback",
+        "schemes": ["loopback", "udp", "tcp"],
+        "env": "PYFMI_INTEROP_TRANSPORT",
+        "uri_examples": [
+            "loopback",
+            "udp://239.0.0.1:5000",
+            "tcp://127.0.0.1:5001",
+        ],
     }
     return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
 

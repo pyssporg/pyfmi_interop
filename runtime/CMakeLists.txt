@@ -79,6 +79,7 @@ else()
     )
 endif()
 target_link_libraries(pyfmi_interop_fmi2_cs PRIVATE Threads::Threads)
+pyfmi_interop_link_transport_whole_archive(pyfmi_interop_fmi2_cs)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(pyfmi_interop_fmi2_cs PRIVATE -Wall -Wextra)
@@ -114,4 +115,14 @@ if(BUILD_TESTING AND PYFMI_INTEROP_BUILD_TESTS)
         target_compile_options(pyfmi_interop_wire_test PRIVATE -Wall -Wextra)
     endif()
     add_test(NAME pyfmi_interop_wire_test COMMAND pyfmi_interop_wire_test)
+
+    add_executable(pyfmi_interop_transport_test
+        tests/test_transport.cpp
+    )
+    target_link_libraries(pyfmi_interop_transport_test PRIVATE pyfmi_interop_runtime)
+    pyfmi_interop_link_transport_whole_archive(pyfmi_interop_transport_test)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(pyfmi_interop_transport_test PRIVATE -Wall -Wextra)
+    endif()
+    add_test(NAME pyfmi_interop_transport_test COMMAND pyfmi_interop_transport_test)
 endif()

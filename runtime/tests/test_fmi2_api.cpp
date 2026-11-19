@@ -1,13 +1,17 @@
 #include "pyfmi_interop/runtime/model_runtime.hpp"
+#include "pyfmi_interop/runtime/wire.hpp"
 
 #include "fmi2Functions.h"
 
+#include <array>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -17,7 +21,9 @@ using pyfmi_interop::Direction;
 using pyfmi_interop::ModelRuntime;
 using pyfmi_interop::Sample;
 using pyfmi_interop::SignalDescriptor;
+using pyfmi_interop::TransportRole;
 using pyfmi_interop::Value;
+using pyfmi_interop::WireModelCodec;
 
 std::string g_last_log;
 
@@ -48,6 +54,18 @@ void set_no_model(bool enabled) {
 #endif
 }
 
+void set_role(const char* role) {
+#if defined(_WIN32)
+    _putenv_s("PYFMI_INTEROP_TEST_ROLE", role != nullptr ? role : "");
+#else
+    if (role != nullptr) {
+        setenv("PYFMI_INTEROP_TEST_ROLE", role, 1);
+    } else {
+        unsetenv("PYFMI_INTEROP_TEST_ROLE");
+    }
+#endif
+}
+
 void set_transport(const char* name) {
 #if defined(_WIN32)
     _putenv_s("PYFMI_INTEROP_TRANSPORT", name != nullptr ? name : "");
@@ -64,7 +82,7 @@ void set_transport(const char* name) {
 #endif
 }
 
-class TestModel final : public ModelRuntime {
+class TestModel final : public ModelRuntime, public WireModelCodec {
 public:
     TestModel() {
         signals_ = {
@@ -165,6 +183,62 @@ public:
         }
     }
 
+    WireModelCodec* wire_codec() noexcept override { return this; }
+
+    TransportRole transport_role() const override {
+        const char* value = std::getenv("PYFMI_INTEROP_TEST_ROLE");
+        if (value == nullptr) {
+            return TransportRole::None;
+        }
+        const std::string role(value);
+        if (role == "sender") {
+            return TransportRole::Sender;
+        }
+        if (role == "receiver") {
+            return TransportRole::Receiver;
+        }
+        if (role == "adapter") {
+            return TransportRole::Adapter;
+        }
+        return TransportRole::None;
+    }
+
+    pyfmi_interop::wire::PayloadFormat payload_format() const override {
+        return pyfmi_interop::wire::PayloadFormat::Opaque;
+    }
+
+    bool wire_model_id(
+        std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize>& out) const override {
+        std::vector<pyfmi_interop::wire::ModelIdSignal> records;
+        records.reserve(signals_.size());
+        for (const SignalDescriptor& signal : signals_) {
+            records.push_back({signal.value_reference,
+                               static_cast<std::uint8_t>(signal.type)});
+        }
+        out = pyfmi_interop::wire::model_id("test", 0.5, records);
+        return true;
+    }
+
+    // The test payload is one little-endian double: the input is fed back with
+    // an offset, which makes the round trip observable.
+    bool encode_wire_payload(std::string& payload,
+                             std::string& error) const override {
+        (void)error;
+        const double value = command_ + 1.0;
+        payload.assign(reinterpret_cast<const char*>(&value), sizeof(value));
+        return true;
+    }
+
+    bool decode_wire_payload(std::string_view payload,
+                             std::string& error) override {
+        if (payload.size() != sizeof(double)) {
+            error = "test payload must be one double";
+            return false;
+        }
+        std::memcpy(&command_, payload.data(), sizeof(command_));
+        return true;
+    }
+
 private:
     std::vector<SignalDescriptor> signals_;
     double speed_ = 0.0;
@@ -194,6 +268,7 @@ extern "C" void pyfmi_interop_destroy_model(pyfmi_interop::ModelRuntime* model) 
 
 int main() {
     set_transport(nullptr);
+    set_role(nullptr);
 
     fmi2CallbackFunctions callbacks {};
     callbacks.logger = logger;
@@ -358,8 +433,8 @@ int main() {
 
     fmi2FreeInstance(component);
 
-    // Transport: an explicitly requested but unavailable backend must make
-    // instantiate fail with a clear message.
+    // A role with an unknown backend must make instantiate fail clearly.
+    set_role("adapter");
     set_transport("does-not-exist");
     g_last_log.clear();
     component = fmi2Instantiate("bad-transport", fmi2CoSimulation, "guid",
@@ -370,9 +445,11 @@ int main() {
     if (g_last_log.find("unknown transport") == std::string::npos) {
         return fail("unavailable transport failure must log a clear message");
     }
-    set_transport(nullptr);
 
-    // Transport: loopback exchange runs end to end around the step.
+    // Role-aware stepping: adapter does receive -> apply -> step -> publish ->
+    // send around a loopback byte transport.  The first step has no inbound
+    // frame and must hold its input value; the second consumes the published
+    // frame.
     set_transport("loopback");
     g_last_log.clear();
     component = fmi2Instantiate("loopback", fmi2CoSimulation, "guid",
@@ -393,14 +470,15 @@ int main() {
         real_value[0] != 3.5) {
         return fail("loopback first step");
     }
-    // The published frame feeds back through consume before the second step.
+    // The published frame feeds back into the input before the second step.
     if (fmi2DoStep(component, 0.5, 0.5, fmi2True) != fmi2OK ||
         fmi2GetReal(component, speed_vr, 1, real_value) != fmi2OK ||
         real_value[0] != 6.0) {
-        return fail("loopback exchange must run consume before step");
+        return fail("loopback exchange must apply the received payload");
     }
     fmi2FreeInstance(component);
     set_transport(nullptr);
+    set_role(nullptr);
 
     fmi2FreeInstance(nullptr);
 

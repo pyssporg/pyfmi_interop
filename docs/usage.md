@@ -61,9 +61,36 @@ pyfmi-interop generate --model-json examples/loopback/model.json \
 
 Generation emits a small C++17 project: `model_runtime.hpp`,
 `model_runtime.cpp`, `model_impl.hpp`, `bindings.cpp`, `model.json`, and
-`CMakeLists.txt`. The source contains typed signal members, value-reference
-accessors, publish/consume hooks, the `user_step` hook, and the
+`CMakeLists.txt`, plus the artifacts of the selected serialization backend. The
+source contains typed signal members, value-reference accessors,
+publish/consume hooks, the `user_step` hook, and the
 `pyfmi_interop_create_model` factory.
+
+`--serialization` selects the payload backend (default `protobuf`):
+
+| Backend | `format_id` | Artifacts |
+| --- | ---: | --- |
+| `protobuf` | 1 | `<Model>.proto`, `wire.json`, `model_wire.cpp`, `wire_conformance.cpp` |
+| `packed` | 2 | `wire.json`, `model_wire.cpp`, `wire_conformance.cpp`; deterministic little-endian |
+| `opaque` | 0 | `wire.json`; no schema and no codec, caller bytes pass through |
+
+Run `pyfmi-interop serializations` to list the installed backends. The packed
+layout, in value-reference order, is `float64` for real, `int32` for integer,
+`uint8` (0/1) for boolean, and a `uint32` byte count followed by UTF-8 bytes for
+string; there is no tag or padding.
+
+The payload message is named after the part definition whose interface the
+model carries (`demo_model` for a plain IR model), and each field identifier is
+the interface name with `.`/`[` mapped to `_` (`out.value[0]` ->
+`out_value_0`). Two names that map to the same identifier are an error, never a
+silent rename. `wire.json` records the wire direction per field, which is the
+inverse of FMI causality: an FMI input is wire `out`, an FMI output is wire
+`in`, and parameters are `none`.
+
+The interface role is derived from causality (`sender` inputs only, `receiver`
+outputs only, `adapter` both, `none` neither) and written to `model.json` and
+`wire.json`. `--role` may narrow it; a role that needs a causality the
+interface does not carry is refused.
 
 `model_impl.hpp` holds the empty `user_step` hook and is the one generated file
 meant to be edited for model equations. Everything else is build output: change
@@ -87,9 +114,37 @@ cmake -S build/loopback -B build/loopback/out \
 cmake --build build/loopback/out
 ```
 
-There is no protocol gate. The in-process loopback backend is always
-available, and byte transports carry the wire frame outside this repository;
-see `docs/wire.md`.
+A generated model whose role is not `none` also links the static transport
+library, because the UDP and TCP backends register themselves from static
+initializers and a plain archive link would drop them. The generated project
+takes two more cache variables and fails configuration with a clear message
+when a role model is configured without them:
+
+- `PYFMI_INTEROP_TRANSPORT_INCLUDE_DIR` — directory exposing
+  `pyfmi_interop/transport/*.hpp`. It is `transport/include` in a checkout and
+  `_runtime/include` in a wheel.
+- `PYFMI_INTEROP_TRANSPORT_LIBRARY` — path to
+  `libpyfmi_interop_transport.a` (`.lib` on Windows). The top-level build writes
+  it to `build/runtime/`.
+
+`pyfmi-interop build` resolves both automatically for a role model and keeps
+passing only the runtime for a `none` model.
+
+The transport is selected at run time by `PYFMI_INTEROP_TRANSPORT`, whose URI
+selects the backend and endpoint:
+
+- `loopback` — in-process, the default;
+- `udp://<bind-host>:<port>[?peer=<host>:<port>]` — one datagram per frame;
+- `tcp://<bind-host>:<port>[?peer=<host>:<port>]` — stream transport.
+
+A port of `0` asks the OS for an ephemeral port. `PYFMI_INTEROP_TRANSPORT_ENDPOINT`
+is the legacy suffix for a bare scheme name. The full grammar, framing, and
+validation rules are in `docs/wire.md`.
+
+`generate` writes `--serialization` into `model.json`; `package` reads it and
+bundles only that backend's artifacts. Every FMU also carries
+`resources/transport.json`, which documents the default transport and the
+`PYFMI_INTEROP_TRANSPORT` endpoint keys the C++ runtime reads.
 
 ## Package
 
@@ -113,9 +168,10 @@ the built shared library. The library must exist and match the model name.
 | Command | Purpose |
 | --- | --- |
 | `pyfmi-interop transports` | List the byte transport names (`udp`, `tcp`, `unix`). |
+| `pyfmi-interop serializations` | List the payload backends (`protobuf`, `packed`, `opaque`). |
 | `pyfmi-interop inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
-| `pyfmi-interop generate --model-json PATH --out DIR` | Generate C++ from IR JSON. |
-| `pyfmi-interop generate --sysml PATH --out DIR [--step-size S] [--name NAME]` | Generate C++ from SysML v2. |
+| `pyfmi-interop generate --model-json PATH --out DIR [--serialization NAME] [--role ROLE]` | Generate C++ from IR JSON. |
+| `pyfmi-interop generate --sysml PATH --out DIR [--step-size S] [--name NAME] [--serialization NAME] [--role ROLE]` | Generate C++ from SysML v2. |
 | `pyfmi-interop build DIR [--build-dir DIR]` | Configure and build a generated model with CMake. |
 | `pyfmi-interop package DIR --library PATH --out FILE.fmu` | Write the FMI 2.0 description and deterministic FMU archive. |
 

@@ -5,25 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-11-19
+## [0.4.0] - 2026-11-19
 
-### Changed
+### Added
 
-- Renamed the project from `pyfmi-distributed` to `pyfmi-interop`: the Python
-  module is now `pyfmi_interop`, the C++ namespace and include directory are
-  `pyfmi_interop`, the CLI is `pyfmi-interop`, and CMake targets and options are
-  `pyfmi_interop_*` and `PYFMI_INTEROP_*`.
-
-### Breaking
-
-- Environment variables `PYFMI_DIST_*` are now `PYFMI_INTEROP_*`; there are no
-  compatibility aliases or fallbacks.
-- The C ABI factory is now `pyfmi_interop_create_model` /
-  `pyfmi_interop_destroy_model`.
-- C++ includes move from `pyfmi_distributed/runtime/...` to
-  `pyfmi_interop/runtime/...`.
-- The `pyfmi_distributed` Python module and the `pyfmi-distributed`
-  distribution/CLI names are removed without shims.
+- Serialization registry with `protobuf` (canonical), `packed` (deterministic
+  little-endian, no third-party dependency, generated C++ codec), and `opaque`
+  (format id 0, passthrough) backends; `generate --serialization` and the `serializations`
+  CLI verb; only the selected backend's schema artifacts are bundled, and
+  `resources/transport.json` documents the default transport and endpoint keys.
+- Part-definition message naming with collision-checked identifier
+  sanitization (`out.value[0]` -> `out_value_0`), one scalar field per array
+  element, per-field `wire` direction metadata (inverse of FMI causality), and
+  `format`/`format_id` in `wire.json`.
+- Generated `publish`/`consume` now copy real signal values in the wire
+  direction instead of only carrying the step time, and the interface role
+  (`sender`/`receiver`/`adapter`/`none`) is derived and exposed in
+  `model.json`/`wire.json`, with a narrowing-only `--role` override.
+- Wire version 2: 56-byte header with an explicit `payload_format` tag,
+  zero-required flags/reserved fields, and distinct decode errors for both.
 
 ## [0.3.0] - 2026-11-19
 
@@ -88,3 +88,23 @@ contract.
 
 - The wheel is a platform wheel carrying the prebuilt static runtime; the
   native runtime must be built before `python -m build`.
+
+## [0.2.0] - 2026-11-19
+
+### Changed
+
+- Renamed the project from `pyfmi-distributed` to `pyfmi-interop`: the Python
+  module is now `pyfmi_interop`, the C++ namespace and include directory are
+  `pyfmi_interop`, the CLI is `pyfmi-interop`, and CMake targets and options are
+  `pyfmi_interop_*` and `PYFMI_INTEROP_*`.
+
+### Breaking
+
+- Environment variables `PYFMI_DIST_*` are now `PYFMI_INTEROP_*`; there are no
+  compatibility aliases or fallbacks.
+- The C ABI factory is now `pyfmi_interop_create_model` /
+  `pyfmi_interop_destroy_model`.
+- C++ includes move from `pyfmi_distributed/runtime/...` to
+  `pyfmi_interop/runtime/...`.
+- The `pyfmi_distributed` Python module and the `pyfmi-distributed`
+  distribution/CLI names are removed without shims.

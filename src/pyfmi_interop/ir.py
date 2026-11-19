@@ -287,13 +287,17 @@ class Signal:
             encode_string(self.initial, self.capacity, signal_name=self.name)
 
     def check_projection(self) -> None:
-        """Raise :class:`ProjectionError` if this signal cannot be a wire field."""
+        """Raise :class:`ProjectionError` if this signal cannot be a wire field.
 
-        if not _is_proto_field_name(self.name):
+        The signal name is an FMI interface name (``port.field`` or
+        ``field[i]``); the selected serialization backend maps it to its own
+        identifier and rejects collisions there.  This check only rejects names
+        that cannot be carried at all.
+        """
+
+        if "\x00" in self.name or "\n" in self.name or "\r" in self.name:
             raise ProjectionError(
-                "name is not a legal protobuf field identifier "
-                "(letters, digits, underscore; not starting with a digit)",
-                signal_name=self.name,
+                "name must not contain NUL or line breaks", signal_name=self.name
             )
 
     @property
@@ -345,6 +349,13 @@ class ModelDefinition:
     rate_groups: tuple[RateGroup, ...] = ()
     metadata: Mapping[str, str] = field(default_factory=dict)
     description: str = ""
+    #: Name of the part definition whose interface this model carries.  The
+    #: payload message is named after it; ``None`` falls back to ``name``.
+    interface: str | None = None
+    #: Resolved wire role (``sender``/``receiver``/``adapter``/``none``).
+    role: str | None = None
+    #: Serialization backend that generated this model (``protobuf``/...).
+    serialization: str | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -358,6 +369,13 @@ class ModelDefinition:
             raise ValueError("step_size_s must be > 0")
         if not self.guid:
             raise ValueError("guid must not be empty")
+        for label, value in (
+            ("interface", self.interface),
+            ("role", self.role),
+            ("serialization", self.serialization),
+        ):
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{label} must be a non-empty string or None")
 
     @property
     def base_period_s(self) -> float:
@@ -527,6 +545,9 @@ def model_from_dict(payload: Mapping[str, Any]) -> ModelDefinition:
         rate_groups=rate_groups,
         metadata=dict(payload.get("metadata", {})),
         description=payload.get("description", ""),
+        interface=payload.get("interface"),
+        role=payload.get("role"),
+        serialization=payload.get("serialization"),
     )
 
 

@@ -1,34 +1,26 @@
 #pragma once
 
-#include <cstddef>
-#include <string>
+#include <optional>
+#include <vector>
 
 #include "pyfmi_interop/runtime/transport.hpp"
 
 namespace pyfmi_interop {
 
-// In-process transport used by tests and by generated models that run without
-// a network.  send() copies the frame into preallocated storage; receive()
-// returns the most recently sent frame.
-//
-// Storage is grown in initialize() when the "signal_count" option is present
-// and, defensively, on the first send/receive whose frame is larger than the
-// buffer.  After that the numeric fast path does not allocate.  Copying a
-// String Value can allocate unless the destination string already has enough
-// capacity; this is the documented string exception.
+// In-process reference transport used by tests and single-process models.
+// send() stores the newest frame and drops an older unread one; receive()
+// returns it and clears the slot.
 class LoopbackTransport final : public Transport {
 public:
     LoopbackTransport() = default;
 
-    bool initialize(const TransportConfig& config, std::string& error) override;
-    void finalize() noexcept override;
-    bool available() const noexcept override;
-    bool send(const Sample& sample, std::string& error) override;
-    bool receive(Sample& sample, std::string& error) override;
+    void initialize(const std::string& uri) override;
+    void finalize() override;
+    bool send(ByteSpan frame) override;
+    std::optional<std::vector<std::byte>> receive() override;
 
 private:
-    Sample buffer_;
-    bool has_sample_ = false;
+    std::optional<std::vector<std::byte>> newest_;
 };
 
 }  // namespace pyfmi_interop

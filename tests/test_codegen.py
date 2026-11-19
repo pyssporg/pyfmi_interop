@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -127,15 +128,84 @@ def test_read_and_write_enforce_direction_and_type(tmp_path):
     assert "value.type != pyfmi_interop::DataType::Integer" in write_section
 
 
-def test_publish_and_consume_carry_only_the_step_time(tmp_path):
+def test_publish_and_consume_copy_values_in_the_wire_direction(tmp_path):
     target = generate_model(make_model(), tmp_path / "gen")
     source = (target / "bindings.cpp").read_text(encoding="utf-8")
     publish = source.split("::publish(")[1].split("::consume(")[0]
     consume = source.split("::consume(")[1]
 
     assert "sample.simulation_time = m_simulation_time;" in publish
-    assert "sample.values[" not in publish
-    assert "sample.values[" not in consume
+    # FMI input 5 is wire "out": publish reads the member into the sample.
+    assert "sample.values[5] = pyfmi_interop::Value::make_real(m_vr5_setpoint);" in publish
+    assert "sample.valid[5] = 1u;" in publish
+    # Parameters 3 and 4 are wire "none" and never travel.
+    assert "sample.values[3]" not in publish
+    assert "sample.values[4]" not in publish
+    # FMI outputs 1 and 2 are wire "in": consume applies the sample.
+    assert "if (sample.is_valid(1u))" in consume
+    assert "m_vr1_speed = sample.values[1].real_value;" in consume
+    assert 'copy_bounded(m_vr2_label.data(), m_vr2_label.size(),' in consume
+    assert "sample.values[5]" not in consume
+
+
+def test_role_is_derived_from_causality(tmp_path):
+    target = generate_model(make_model(), tmp_path / "adapter")
+    model = json.loads((target / "model.json").read_text(encoding="utf-8"))
+    wire_json = json.loads((target / "wire.json").read_text(encoding="utf-8"))
+    assert model["role"] == "adapter"
+    assert wire_json["role"] == "adapter"
+
+    receiver = ModelDefinition(
+        name="receiver_model",
+        guid=deterministic_guid("receiver_model"),
+        step_size_s=0.01,
+        signals=(Signal("y", 1, DataType.REAL, Direction.OUTPUT),),
+    )
+    assert json.loads(
+        (generate_model(receiver, tmp_path / "receiver") / "model.json").read_text(
+            encoding="utf-8"
+        )
+    )["role"] == "receiver"
+
+
+def test_role_override_cannot_widen_the_interface(tmp_path):
+    sender = ModelDefinition(
+        name="sender_model",
+        guid=deterministic_guid("sender_model"),
+        step_size_s=0.01,
+        signals=(Signal("u", 1, DataType.REAL, Direction.INPUT),),
+    )
+    with pytest.raises(ValueError, match="widens"):
+        generate_model(sender, tmp_path / "bad", role="receiver")
+    # Narrowing is allowed.
+    target = generate_model(sender, tmp_path / "none", role="none")
+    assert '"role": "none"' in (target / "model.json").read_text(encoding="utf-8")
+
+
+def test_opaque_backend_emits_no_codec_or_proto(tmp_path):
+    target = generate_model(make_model(), tmp_path / "opaque", serialization="opaque")
+    names = {path.name for path in target.iterdir()}
+
+    assert "model_wire.cpp" not in names
+    assert "wire_conformance.cpp" not in names
+    assert "demo_model.proto" not in names
+    assert "wire.json" in names
+    wire_json = (target / "wire.json").read_text(encoding="utf-8")
+    assert '"format": "opaque"' in wire_json
+    assert '"format_id": 0' in wire_json
+
+
+def test_packed_backend_emits_descriptor_without_proto(tmp_path):
+    target = generate_model(make_model(), tmp_path / "packed", serialization="packed")
+    names = {path.name for path in target.iterdir()}
+
+    assert "demo_model.proto" not in names
+    assert "model_wire.cpp" in names
+    assert "wire_conformance.cpp" in names
+    wire_json = (target / "wire.json").read_text(encoding="utf-8")
+    assert '"format": "packed"' in wire_json
+    assert '"format_id": 2' in wire_json
+    assert '"role": "adapter"' in wire_json
 
 
 def test_factory_is_global_extern_c(tmp_path):

@@ -17,13 +17,16 @@ from .builder import build_model
 from .codegen import generate_model
 from .ir import ModelDefinition, model_from_dict
 from .packaging import package_fmu
+from .roles import ROLES
 from .schema import write_schema
+from .serialization import names as serialization_names
 
 __all__ = ["build_parser", "main"]
 
-#: Byte transports that carry a wire frame.  This repository defines the frame,
-#: not the transport; the names are listed so an operator can see the boundary.
-_BYTE_TRANSPORTS = ("udp", "tcp", "unix")
+#: Byte transports shipped in ``transport/``.  The C++ registry
+#: (``make_transport``/``transport_names``) is authoritative at run time; this
+#: list is the operator-facing view and must match it.
+_BYTE_TRANSPORTS = ("loopback", "udp", "tcp")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +38,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("transports", help="List the byte transport names.")
+    subparsers.add_parser(
+        "serializations",
+        help="List the payload serialization backends.",
+    )
 
     inspect_parser = subparsers.add_parser(
         "inspect",
@@ -50,6 +57,18 @@ def build_parser() -> argparse.ArgumentParser:
     source.add_argument("--model-json", type=Path, help="Path to a model.json IR file.")
     source.add_argument("--sysml", type=Path, help="Path to a SysML v2 architecture file.")
     generate_parser.add_argument("--out", type=Path, required=True)
+    generate_parser.add_argument(
+        "--serialization",
+        choices=serialization_names(),
+        default="protobuf",
+        help="Payload serialization backend (default: protobuf).",
+    )
+    generate_parser.add_argument(
+        "--role",
+        choices=ROLES,
+        default=None,
+        help="Narrow the role derived from FMI causality.",
+    )
     generate_parser.add_argument(
         "--step-size",
         type=float,
@@ -83,6 +102,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     schema_parser.add_argument("--model-json", type=Path, required=True)
     schema_parser.add_argument("--out", type=Path, required=True)
+    schema_parser.add_argument(
+        "--serialization",
+        choices=serialization_names(),
+        default="protobuf",
+        help="Payload serialization backend (default: protobuf).",
+    )
 
     return parser
 
@@ -101,6 +126,9 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if args.command == "transports":
         _print_transports()
         return 0
+    if args.command == "serializations":
+        _print_serializations()
+        return 0
     if args.command == "inspect":
         _print_model(_load_model_json(args.model_json))
         return 0
@@ -110,7 +138,12 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
             if args.model_json is not None
             else _model_from_sysml(args.sysml, args.step_size, args.name)
         )
-        target = generate_model(model, args.out)
+        target = generate_model(
+            model,
+            args.out,
+            serialization=args.serialization,
+            role=args.role,
+        )
         print(f"Generated model sources at {target}")
         return 0
     if args.command == "build":
@@ -122,11 +155,16 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         print(f"Packaged {destination}")
         return 0
     if args.command == "schema":
-        proto_path, descriptor_path = write_schema(
-            _load_model_json(args.model_json), args.out
+        paths = write_schema(
+            _load_model_json(args.model_json),
+            args.out,
+            serialization=args.serialization,
         )
-        print(f"Schema proto at {proto_path}")
-        print(f"Schema descriptor at {descriptor_path}")
+        descriptor = next(path for path in paths if path.name == "wire.json")
+        if args.serialization == "protobuf":
+            proto_path = next(path for path in paths if path.suffix == ".proto")
+            print(f"Schema proto at {proto_path}")
+        print(f"Schema descriptor at {descriptor}")
         return 0
     parser.error(f"unsupported command: {args.command}")
     return 2
@@ -167,6 +205,12 @@ def _print_transports() -> None:
         print(name)
 
 
+def _print_serializations() -> None:
+    print("name")
+    for name in serialization_names():
+        print(name)
+
+
 def _print_model(model: ModelDefinition) -> None:
     print(f"model: {model.name}")
     print(f"guid: {model.guid}")
@@ -174,6 +218,12 @@ def _print_model(model: ModelDefinition) -> None:
     print(f"realtime: {'true' if model.realtime else 'false'}")
     if model.description:
         print(f"description: {model.description}")
+    if model.interface:
+        print(f"interface: {model.interface}")
+    if model.role:
+        print(f"role: {model.role}")
+    if model.serialization:
+        print(f"serialization: {model.serialization}")
     print(f"signals: {len(model.signals)}")
     for signal in sorted(model.signals, key=lambda item: item.value_reference):
         details = [f"{signal.data_type.value}", f"{signal.direction.value}"]

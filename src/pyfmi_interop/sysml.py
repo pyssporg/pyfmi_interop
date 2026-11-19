@@ -152,12 +152,17 @@ def model_from_architecture(
                 )
             )
 
+    # The payload message is named after the part definition whose interface
+    # the model carries.  A container that combines several exported components
+    # has no single part definition, so the message falls back to the model name.
+    interface = selected[0].name if len(selected) == 1 else None
     return ir.ModelDefinition(
         name=model_name,
         guid=ir.deterministic_guid(model_name),
         step_size_s=step_size,
         realtime=realtime,
         signals=ir.assign_value_references(signals),
+        interface=interface,
     )
 
 

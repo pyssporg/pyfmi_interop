@@ -1,30 +1,44 @@
 #include "pyfmi_interop/runtime/model_runtime.hpp"
 #include "pyfmi_interop/runtime/transport.hpp"
+#include "pyfmi_interop/runtime/wire.hpp"
 
 #include "fmi2Functions.h"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <new>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
 
 using pyfmi_interop::DataType;
 using pyfmi_interop::ModelRuntime;
-using pyfmi_interop::Sample;
 using pyfmi_interop::Transport;
-using pyfmi_interop::TransportConfig;
+using pyfmi_interop::ByteSpan;
+using pyfmi_interop::TransportError;
+using pyfmi_interop::TransportRole;
 using pyfmi_interop::Value;
+using pyfmi_interop::WireModelCodec;
+namespace wire = pyfmi_interop::wire;
 
 // One fmi2Component.  The facade is synchronous: fmi2DoStep calls
 // model->step() on the caller's thread and no background thread is created.
 struct InstanceState {
     ModelRuntime* model = nullptr;
     std::unique_ptr<Transport> transport;
-    Sample sample;
+    WireModelCodec* codec = nullptr;
+    TransportRole role = TransportRole::None;
+    std::array<std::uint8_t, wire::kModelIdSize> model_id{};
+    std::uint32_t instance_id = 0;
+    std::uint64_t sequence = 0;
+    std::uint64_t receive_misses = 0;
+    std::string payload;
     fmi2CallbackFunctions callbacks {};
     std::string instance_name;
     bool logging_on = false;
@@ -75,16 +89,32 @@ std::string environment_value(const char* name) {
     return value != nullptr ? std::string(value) : std::string();
 }
 
-std::size_t sample_size(const ModelRuntime& model) {
-    std::uint32_t maximum = 0;
-    bool any = false;
-    for (const auto& signal : model.signals()) {
-        any = true;
-        if (signal.value_reference > maximum) {
-            maximum = signal.value_reference;
-        }
+std::uint32_t instance_identity(const std::string& name) {
+    std::uint32_t hash = 2166136261u;  // FNV-1a, stable across processes.
+    for (const char character : name) {
+        hash ^= static_cast<std::uint8_t>(character);
+        hash *= 16777619u;
     }
-    return any ? static_cast<std::size_t>(maximum) + 1u : 0u;
+    return hash == 0u ? 1u : hash;
+}
+
+// `PYFMI_INTEROP_TRANSPORT` carries the full URI.  The legacy endpoint
+// variable still supplies the authority for a bare scheme.  The default is
+// loopback, but only a generated model with a non-None role opens a transport.
+std::string resolve_transport_uri(std::string& error) {
+    std::string value = environment_value("PYFMI_INTEROP_TRANSPORT");
+    const std::string endpoint = environment_value("PYFMI_INTEROP_TRANSPORT_ENDPOINT");
+    if (value.empty()) {
+        value = "loopback";
+    }
+    if (value == "none") {
+        error = "a transport role requires PYFMI_INTEROP_TRANSPORT to name a backend";
+        return {};
+    }
+    if (value.find("://") == std::string::npos && !endpoint.empty()) {
+        value += "://" + endpoint;
+    }
+    return value;
 }
 
 fmi2Component transport_instantiate_failure(InstanceState* instance,
@@ -177,53 +207,40 @@ fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuType,
     instance->instance_name =
         instanceName != nullptr ? instanceName : "pyfmi_interop";
     instance->logging_on = loggingOn == fmi2True;
+    instance->instance_id = instance_identity(instance->instance_name);
 
-    const std::string transport_name = environment_value("PYFMI_INTEROP_TRANSPORT");
-    if (!transport_name.empty() && transport_name != "none") {
-        TransportConfig config;
-        config.name = transport_name;
-        config.endpoint = environment_value("PYFMI_INTEROP_TRANSPORT_ENDPOINT");
-
-        const std::string timeout_text =
-            environment_value("PYFMI_INTEROP_TRANSPORT_TIMEOUT_MS");
-        if (!timeout_text.empty()) {
-            char* end = nullptr;
-            const double timeout_ms = std::strtod(timeout_text.c_str(), &end);
-            if (end == timeout_text.c_str() || *end != '\0' || timeout_ms < 0.0) {
-                return transport_instantiate_failure(
-                    instance, functions, instanceName,
-                    "pyfmi_interop: PYFMI_INTEROP_TRANSPORT_TIMEOUT_MS must be a "
-                    "non-negative number");
-            }
-            config.timeout_s = timeout_ms / 1000.0;
-        }
-
-        const std::size_t signal_count = sample_size(*model);
-        instance->sample.resize(signal_count);
-        config.options.emplace_back("signal_count", std::to_string(signal_count));
-
-        std::string transport_error;
-        std::unique_ptr<Transport> transport =
-            pyfmi_interop::make_transport(transport_name, transport_error);
-        if (transport == nullptr) {
+    // The generated model reports its role; a model without a codec keeps the
+    // historical no-transport step exactly.
+    instance->codec = model->wire_codec();
+    if (instance->codec != nullptr) {
+        instance->role = instance->codec->transport_role();
+    }
+    if (instance->role != TransportRole::None) {
+        if (!instance->codec->wire_model_id(instance->model_id)) {
             return transport_instantiate_failure(
                 instance, functions, instanceName,
-                "pyfmi_interop: " + transport_error);
+                "pyfmi_interop: the model has a transport role but no wire model id");
         }
-        if (!transport->initialize(config, transport_error)) {
+
+        std::string uri_error;
+        const std::string uri = resolve_transport_uri(uri_error);
+        if (uri.empty()) {
             return transport_instantiate_failure(
                 instance, functions, instanceName,
-                "pyfmi_interop: transport '" + transport_name +
-                    "' failed to initialize: " + transport_error);
+                "pyfmi_interop: " + (uri_error.empty()
+                                         ? std::string("no transport URI configured")
+                                         : uri_error));
         }
-        if (!transport->available()) {
-            transport->finalize();
+
+        try {
+            std::unique_ptr<Transport> transport = pyfmi_interop::make_transport(uri);
+            transport->initialize(uri);
+            instance->transport = std::move(transport);
+        } catch (const std::exception& error) {
             return transport_instantiate_failure(
                 instance, functions, instanceName,
-                "pyfmi_interop: transport '" + transport_name +
-                    "' is not available in this build");
+                "pyfmi_interop: transport '" + uri + "' failed: " + error.what());
         }
-        instance->transport = std::move(transport);
     }
 
     return instance;
@@ -301,7 +318,8 @@ fmi2Status fmi2Reset(fmi2Component c) {
         return fmi2Error;
     }
     instance->model->reset();
-    instance->sample.clear_valid();
+    instance->sequence = 0;
+    instance->receive_misses = 0;
     instance->in_initialization_mode = false;
     instance->initialized = false;
     instance->terminated = false;
@@ -636,32 +654,145 @@ fmi2Status fmi2DoStep(fmi2Component c, fmi2Real currentCommunicationPoint,
         return report_error(instance, "fmi2DoStep: negative communication step size");
     }
 
-    // Synchronous by design: no background thread and no step queue.  With a
-    // transport the frame is exchanged around the step; without one the model
-    // runs exactly as before.
-    if (instance->transport) {
-        std::string transport_error;
-        if (!instance->transport->receive(instance->sample, transport_error)) {
-            // A transport may have no inbound frame for this step (the first
-            // loopback step is the common case).  Run with a cleared frame
-            // instead of failing the step.
+    // Synchronous by design: no background thread and no step queue.  The
+    // role decides whether a byte frame is received and/or sent around the
+    // model step; `None` is exactly the historical step-only path.
+    auto step_model = [&]() {
+        instance->model->step(currentCommunicationPoint, communicationStepSize);
+    };
+
+    auto receive_and_apply = [&]() {
+        if (instance->transport == nullptr || instance->codec == nullptr) {
+            return;
+        }
+        std::optional<std::vector<std::byte>> frame;
+        try {
+            frame = instance->transport->receive();
+        } catch (const std::exception& error) {
+            instance->transport->record_format_error();
             if (instance->logging_on) {
                 log_message(instance, fmi2Warning, "transport",
-                            "receive returned no frame: " + transport_error);
+                            "receive failed: " + std::string(error.what()));
             }
-            instance->sample.clear_valid();
+            ++instance->receive_misses;
+            return;
+        }
+        if (!frame) {
+            // No inbound frame: hold the previous input values.  They are
+            // never cleared or replaced with NaN.
+            ++instance->receive_misses;
+            return;
         }
 
-        instance->model->consume(instance->sample);
-        instance->model->step(currentCommunicationPoint, communicationStepSize);
-        instance->sample.clear_valid();
-        instance->model->publish(instance->sample);
-        if (!instance->transport->send(instance->sample, transport_error)) {
-            return report_error(instance, "fmi2DoStep: transport send failed: " +
-                                              transport_error);
+        const std::string_view buffer(reinterpret_cast<const char*>(frame->data()),
+                                      frame->size());
+        const wire::DecodeResult decoded = wire::decode_frame(buffer);
+        if (!decoded) {
+            if (decoded.error.code == wire::ErrorCode::HeaderChecksumError ||
+                decoded.error.code == wire::ErrorCode::PayloadChecksumError) {
+                instance->transport->record_crc_error();
+            } else {
+                instance->transport->record_format_error();
+            }
+            if (instance->logging_on) {
+                log_message(instance, fmi2Warning, "transport",
+                            "dropped frame: " + decoded.error.message);
+            }
+            return;
         }
-    } else {
-        instance->model->step(currentCommunicationPoint, communicationStepSize);
+        if (decoded.frame.header.model_id != instance->model_id) {
+            instance->transport->record_model_id_mismatch();
+            if (instance->logging_on) {
+                log_message(instance, fmi2Warning, "transport",
+                            "dropped frame: model id mismatch");
+            }
+            return;
+        }
+        if (decoded.frame.header.payload_format != instance->codec->payload_format()) {
+            instance->transport->record_format_error();
+            if (instance->logging_on) {
+                log_message(instance, fmi2Warning, "transport",
+                            "dropped frame: payload format " +
+                                std::string(wire::payload_format_name(
+                                    decoded.frame.header.payload_format)) +
+                                " does not match " +
+                                wire::payload_format_name(instance->codec->payload_format()));
+            }
+            return;
+        }
+
+        const std::string_view payload(
+            reinterpret_cast<const char*>(decoded.frame.payload.data()),
+            decoded.frame.payload.size());
+        std::string error;
+        if (!instance->codec->decode_wire_payload(payload, error)) {
+            instance->transport->record_format_error();
+            if (instance->logging_on) {
+                log_message(instance, fmi2Warning, "transport",
+                            "dropped payload: " + error);
+            }
+        }
+    };
+
+    auto publish_and_send = [&]() -> fmi2Status {
+        if (instance->transport == nullptr || instance->codec == nullptr) {
+            return fmi2OK;
+        }
+        instance->payload.clear();
+        std::string error;
+        if (!instance->codec->encode_wire_payload(instance->payload, error)) {
+            return report_error(instance,
+                                "fmi2DoStep: payload encode failed: " + error);
+        }
+
+        const double nanoseconds =
+            currentCommunicationPoint > 0.0 ? currentCommunicationPoint * 1e9 : 0.0;
+        const wire::EncodeResult encoded = wire::encode_frame(
+            instance->model_id, instance->payload, instance->instance_id,
+            instance->sequence + 1, static_cast<std::uint64_t>(nanoseconds),
+            instance->codec->payload_format());
+        if (!encoded) {
+            return report_error(instance, "fmi2DoStep: frame encode failed: " +
+                                              encoded.error.message);
+        }
+        ++instance->sequence;
+
+        const ByteSpan bytes(
+            reinterpret_cast<const std::byte*>(encoded.frame.data()),
+            encoded.frame.size());
+        try {
+            if (!instance->transport->send(bytes) && instance->logging_on) {
+                log_message(instance, fmi2Warning, "transport",
+                            "send skipped: the transport would block");
+            }
+        } catch (const std::exception& send_error) {
+            return report_error(instance, "fmi2DoStep: transport send failed: " +
+                                              std::string(send_error.what()));
+        }
+        return fmi2OK;
+    };
+
+    switch (instance->role) {
+        case TransportRole::None:
+            step_model();
+            break;
+        case TransportRole::Sender:
+            step_model();
+            if (publish_and_send() != fmi2OK) {
+                return fmi2Error;
+            }
+            break;
+        case TransportRole::Receiver:
+            receive_and_apply();
+            step_model();
+            break;
+        case TransportRole::Adapter:
+            receive_and_apply();
+            step_model();
+            if (publish_and_send() != fmi2OK) {
+                return fmi2Error;
+            }
+            break;
     }
 
     instance->current_time = currentCommunicationPoint + communicationStepSize;

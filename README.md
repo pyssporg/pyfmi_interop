@@ -22,13 +22,16 @@ Static runtime + model library
         ▼
 FMI 2.0 CoSimulation .fmu
 
-Wire format: protobuf payload in length + CRC32 + format-version frames.
+Wire format: a 56-byte length + CRC32 + payload-format frame carrying an
+opaque, protobuf, or packed payload.
 ```
 
 The Python layer is split into `ir.py`, `sysml.py`, `timing.py`, `codegen/`,
-`builder.py`, `packaging.py`, and `cli.py`. The C++ layer in `runtime/` owns the
-`ModelRuntime` interface, the fixed-step realtime scheduler, the wire codec,
-and the types it shares with the Python end.
+`serialization/`, `builder.py`, `packaging.py`, and `cli.py`. `serialization/`
+is the payload seam: `protobuf` (canonical), `packed` (deterministic
+little-endian, dependency-free), and `opaque` (caller bytes). The C++ layer in
+`runtime/` owns the `ModelRuntime` interface, the fixed-step realtime
+scheduler, the wire codec, and the types it shares with the Python end.
 
 ## Install
 
@@ -57,8 +60,10 @@ JSON input needs no SysML dependency.
 
 ```bash
 pyfmi-interop transports
+pyfmi-interop serializations
 pyfmi-interop inspect --model-json examples/loopback/model.json
 pyfmi-interop generate --model-json examples/loopback/model.json --out build/loopback
+# or a dependency-free payload: --serialization packed
 pyfmi-interop build build/loopback
 pyfmi-interop package build/loopback \
   --library build/loopback/build/libLoopbackModel.so \
@@ -72,11 +77,12 @@ installed build.
 ## Wire format
 
 - **Payload:** protobuf is the canonical schema for the model interface and the
-  sample values. The schema carries a version and changes by version, never in
-  place.
-- **Framing:** every message is length-delimited, CRC32-checked, and tagged
-  with the format version. Framing is the only layer this repository defines
-  beyond the payload.
+  sample values; `packed` is a deterministic little-endian alternative and
+  `opaque` carries caller bytes. The schema carries a version and changes by
+  version, never in place.
+- **Framing (v2):** every message has a 56-byte header, CRC32 checks, and an
+  explicit `payload_format` tag (`0` opaque, `1` protobuf, `2` packed).
+  Framing is the only layer this repository defines beyond the payload.
 - **Ends:** a Python end and a C++ end share one set of conformance byte
   vectors, and both must reproduce them.
 - **Non-goals:** protocol bindings, radio or medium models, time management,

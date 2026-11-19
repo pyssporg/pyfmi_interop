@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from . import builder, codegen, ir, native, packaging, schema, wire
+from . import builder, codegen, ir, native, packaging, roles, schema, serialization, wire
 from .builder import build_model
 from .codegen import generate_model
 from .ir import (
@@ -36,6 +36,7 @@ from .ir import (
     write_model_json,
 )
 from .packaging import package_fmu
+from .roles import derive_role, resolve_role
 from .schema import (
     build_schema,
     render_proto,
@@ -51,12 +52,18 @@ from .wire import (
     FieldRangeError,
     Header,
     HeaderChecksumError,
+    InvalidFlags,
     InvalidHeaderSize,
     InvalidMagic,
+    InvalidReserved,
     LengthOverflow,
+    NonZeroFlags,
+    NonZeroReserved,
     PayloadChecksumError,
+    PayloadFormat,
     TrailingBytes,
     TruncatedFrame,
+    UnsupportedPayloadFormat,
     UnsupportedWireVersion,
     WireError,
     decode,
@@ -64,7 +71,7 @@ from .wire import (
     model_id,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 _LAZY_MODULES = {
     "sysml": ".sysml",
@@ -80,16 +87,22 @@ __all__ = [
     "HEADER_SIZE",
     "Header",
     "HeaderChecksumError",
+    "InvalidFlags",
     "InvalidHeaderSize",
     "InvalidMagic",
+    "InvalidReserved",
     "LengthOverflow",
+    "NonZeroFlags",
+    "NonZeroReserved",
     "ModelDefinition",
     "PayloadChecksumError",
+    "PayloadFormat",
     "ProjectionError",
     "RateGroup",
     "Signal",
     "TrailingBytes",
     "TruncatedFrame",
+    "UnsupportedPayloadFormat",
     "UnsupportedWireVersion",
     "WIRE_VERSION",
     "WireError",
@@ -100,6 +113,7 @@ __all__ = [
     "builder",
     "codegen",
     "decode",
+    "derive_role",
     "deterministic_guid",
     "encode",
     "encode_string",
@@ -114,8 +128,11 @@ __all__ = [
     "packaging",
     "render_proto",
     "render_wire_json",
+    "resolve_role",
+    "roles",
     "schema",
     "schema_entries",
+    "serialization",
     "sysml",
     "timing",
     "wire",

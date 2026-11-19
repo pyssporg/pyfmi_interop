@@ -28,28 +28,38 @@ become. It is the first document to read, not a reference of last resort.
 ## Repository Focus
 
 `pyfmi_interop` turns a SysML v2 definition of an FMU into an optimized
-C++17 realtime runtime, carries its model interface on one versioned wire
-format, and packages the result as an FMI 2.0 CoSimulation FMU.
+C++17 realtime runtime, generates the adapter model that carries its interface
+on one versioned wire format, and packages the result as an FMI 2.0
+CoSimulation FMU.
 
-- The Python layer ingests SysML or IR JSON, emits C++, CMake, and the wire
-  schema, builds the native model, and packages the FMU.
+- The Python layer ingests SysML or IR JSON, emits C++, CMake, the wire
+  schema, and the adapter model, builds the native model, and packages the FMU.
 - The C++ layer in `runtime/` owns the reusable `ModelRuntime` interface, the
-  fixed-step scheduler, the wire codec, and the `Transport` registry.
+  fixed-step scheduler, the wire codec, the serialization backends, and the
+  `Transport` registry.
 - The generated model owns the typed signal members, value-reference
   accessors, the `user_step` hook, and the factory
-  `pyfmi_interop_create_model`.
+  `pyfmi_interop_create_model`. The generated adapter owns only the flow to
+  and from the wire: no equations and no `user_step`.
 - Current state, contracts, and design rationale live in `docs/breakdown/`; the
   code is the source of truth only after the owning leaf has been updated.
 
 ## Hard constraints
 
 - **One IR.** `src/pyfmi_interop/ir.py` is the only signal and rate model.
-  Every generator, the builder, and the packager read it; none re-derives value
-  references or timing.
-- **One wire contract.** `src/pyfmi_interop/wire/` and `runtime/src/wire.cpp`
-  are the only framing implementations, and `schema.py` is the only payload
-  schema emitter. Both ends must reproduce the same conformance vectors; no
-  protocol-specific branch grows elsewhere.
+  Every generator — including the adapter generator — plus the builder and the
+  packager read it; none re-derives value references or timing.
+- **One wire contract, one framing authority.** `src/pyfmi_interop/wire/` and
+  `runtime/src/wire.cpp` are the only framing implementations. Each
+  serialization backend has exactly one schema emitter: `schema.py` for the
+  canonical protobuf payload and its counterpart for `packed`. Both ends must
+  reproduce the same conformance vectors; no protocol-specific branch grows
+  elsewhere.
+- **Two registered seams.** Serialization is chosen when the adapter is
+  generated, one emitter per backend; transports are chosen at run time by
+  name — loopback, UDP, TCP. A name resolves to one backend, an unknown or
+  unavailable backend is an error rather than a fallback, and endpoints are
+  deployment data from the environment or a manifest, never SSD/SSP content.
 - **The generated artifact is the unit under test.** Assertions run against the
   emitted C++ source, the per-model CMake build, or the packed `.fmu`, not
   against an intermediate string the writer might not use.
@@ -62,7 +72,8 @@ format, and packages the result as an FMI 2.0 CoSimulation FMU.
   `user_step` hook where model equations belong.
 - **No model equations, no master algorithm.** SysML defines the interface, not
   the equations; `user_step` is the only place model behaviour is written, and
-  the runtime is a slave, not a co-simulation master.
+  the runtime is a slave, not a co-simulation master. The adapter model carries
+  values and nothing else: no equations, no `user_step`.
 
 ## Conventions
 

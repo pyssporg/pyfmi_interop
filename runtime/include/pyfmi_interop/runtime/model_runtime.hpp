@@ -1,8 +1,12 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#include "pyfmi_interop/runtime/wire.hpp"
 
 namespace pyfmi_interop {
 
@@ -60,11 +64,41 @@ struct SignalDescriptor {
     std::uint32_t capacity = 0;
 };
 
+// Role of one FMU instance on the wire.  `None` is the no-transport path; the
+// generated model reports its role through wire_codec().
+enum class TransportRole { None, Sender, Receiver, Adapter };
+
+// Optional interface implemented by a generated model that can encode and
+// decode its own payload.  The FMI facade only frames bytes; it never knows
+// the protobuf schema.  A model without a codec keeps the no-transport path.
+class WireModelCodec {
+public:
+    virtual ~WireModelCodec() = default;
+
+    virtual TransportRole transport_role() const = 0;
+
+    // Serializer this model emits and expects on receive.  It is written into
+    // the envelope's payload_format field and compared before decoding.
+    virtual wire::PayloadFormat payload_format() const = 0;
+
+    // Interface identity from wire::model_id(); false means "not available".
+    virtual bool wire_model_id(std::array<std::uint8_t, wire::kModelIdSize>& out) const = 0;
+
+    // Serialize the model's output values and apply a received payload to its
+    // input values.  Both may allocate and may be called from the step loop.
+    virtual bool encode_wire_payload(std::string& payload, std::string& error) const = 0;
+    virtual bool decode_wire_payload(std::string_view payload, std::string& error) = 0;
+};
+
 class ModelRuntime {
 public:
     virtual ~ModelRuntime() = default;
 
     virtual const std::vector<SignalDescriptor>& signals() const = 0;
+
+    // Optional wire role and codec.  The default is the no-transport path;
+    // a generated model returns `this` from its override.
+    virtual WireModelCodec* wire_codec() noexcept { return nullptr; }
 
     // Clears outputs and restores initial values.  Propagation of parameters
     // into the model state is performed by the generated implementation.

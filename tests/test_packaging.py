@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from zipfile import ZipFile
 
 import pytest
@@ -66,6 +67,7 @@ def test_archive_layout_is_sorted_and_self_describing(tmp_path):
         "modelDescription.xml",
         "resources/model.json",
         "resources/runtime.json",
+        "resources/transport.json",
         expected_binary,
         f"binaries/{platform_binary_dir()}/demo_model.proto",
         f"binaries/{platform_binary_dir()}/wire.json",
@@ -93,7 +95,7 @@ def test_non_projectable_signal_fails_packaging_without_writing_a_fmu(tmp_path):
         name="bad_model",
         guid=deterministic_guid("bad_model"),
         step_size_s=0.01,
-        signals=(Signal("bad-name", 1, DataType.REAL, Direction.OUTPUT),),
+        signals=(Signal("bad\x00name", 1, DataType.REAL, Direction.OUTPUT),),
     )
     model_dir = tmp_path / "gen"
     model_dir.mkdir()
@@ -155,8 +157,46 @@ def test_runtime_and_model_resources(tmp_path):
     assert runtime["modelIdentifier"] == "demo_model"
     assert runtime["platform"] == platform_binary_dir()
     assert runtime["binary"].endswith(f"demo_model{platform_library_extension()}")
+    assert runtime["serialization"] == "protobuf"
+    assert runtime["format_id"] == 1
     assert "adapters" not in runtime
     assert model["name"] == "demo_model"
+
+
+def test_transport_json_documents_the_env_contract(tmp_path):
+    _, destination = package_fixture(tmp_path)
+
+    with ZipFile(destination) as archive:
+        transport = json.loads(archive.read("resources/transport.json"))
+
+    assert transport["default"] == "loopback"
+    assert transport["schemes"] == ["loopback", "udp", "tcp"]
+    assert transport["env"] == "PYFMI_INTEROP_TRANSPORT"
+    assert transport["uri_examples"]
+
+
+def test_packed_and_opaque_fmus_ship_only_their_own_schema(tmp_path):
+    for name, format_id in (("packed", 2), ("opaque", 0)):
+        model = make_model()
+        model = replace(model, serialization=name, role="adapter")
+        model_dir = generate_model(
+            model, tmp_path / f"gen-{name}", serialization=name
+        )
+        library = tmp_path / f"libdemo_model_{name}.so"
+        library.write_bytes(b"fake")
+        destination = package_fmu(
+            model_dir, library, tmp_path / f"{name}.fmu", model=model
+        )
+
+        with ZipFile(destination) as archive:
+            names = archive.namelist()
+            runtime = json.loads(archive.read("resources/runtime.json"))
+
+        platform = platform_binary_dir()
+        assert f"binaries/{platform}/wire.json" in names
+        assert f"binaries/{platform}/demo_model.proto" not in names
+        assert runtime["serialization"] == name
+        assert runtime["format_id"] == format_id
 
 
 def test_missing_library_is_rejected(tmp_path):

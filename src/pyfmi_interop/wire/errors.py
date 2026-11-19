@@ -12,12 +12,17 @@ __all__ = [
     "ChecksumError",
     "FieldRangeError",
     "HeaderChecksumError",
+    "InvalidFlags",
     "InvalidHeaderSize",
     "InvalidMagic",
+    "InvalidReserved",
     "LengthOverflow",
+    "NonZeroFlags",
+    "NonZeroReserved",
     "PayloadChecksumError",
     "TrailingBytes",
     "TruncatedFrame",
+    "UnsupportedPayloadFormat",
     "UnsupportedWireVersion",
     "WireError",
 ]
@@ -37,6 +42,24 @@ class UnsupportedWireVersion(WireError):
 
 class InvalidHeaderSize(WireError):
     """The frame's header-size field is not :data:`~.HEADER_SIZE`."""
+
+
+class NonZeroFlags(WireError):
+    """The frame's flags field is not zero."""
+
+
+class NonZeroReserved(WireError):
+    """The frame's reserved field is not zero."""
+
+
+class UnsupportedPayloadFormat(WireError):
+    """The frame names a payload format this codec does not implement."""
+
+
+#: Backwards/readability aliases; the C++ end spells these `NonZeroFlags` and
+#: `NonZeroReserved`, which are the canonical Python names too.
+InvalidFlags = NonZeroFlags
+InvalidReserved = NonZeroReserved
 
 
 class TruncatedFrame(WireError):

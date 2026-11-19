@@ -17,7 +17,13 @@ from pathlib import Path
 
 from . import native
 
-__all__ = ["build_model", "resolve_runtime_include", "resolve_runtime_library"]
+__all__ = [
+    "build_model",
+    "resolve_runtime_include",
+    "resolve_runtime_library",
+    "resolve_transport_include",
+    "resolve_transport_library",
+]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -66,15 +72,81 @@ def resolve_runtime_include(runtime_include: str | Path | None = None) -> Path:
     )
 
 
+def resolve_transport_library(transport_library: str | Path | None = None) -> Path:
+    """Return the static transport library to link against a role model."""
+
+    if transport_library is not None:
+        candidate = Path(transport_library)
+        if not candidate.is_file():
+            raise FileNotFoundError(
+                f"transport library does not exist: {candidate}"
+            )
+        return candidate
+
+    for candidate in native.transport_search_paths(_REPO_ROOT):
+        if candidate.is_file():
+            return candidate
+
+    searched = ", ".join(str(path) for path in native.transport_search_paths(_REPO_ROOT))
+    raise FileNotFoundError(
+        "transport library not found (searched: "
+        f"{searched}). Build the native transport or install a wheel that bundles it."
+    )
+
+
+def resolve_transport_include(transport_include: str | Path | None = None) -> Path:
+    """Return the directory that exposes ``pyfmi_interop/transport/*``."""
+
+    if transport_include is not None:
+        candidate = Path(transport_include)
+        if not candidate.is_dir():
+            raise FileNotFoundError(
+                f"transport include directory does not exist: {candidate}"
+            )
+        return candidate
+
+    for candidate in native.transport_include_dirs(_REPO_ROOT):
+        if candidate.is_dir():
+            return candidate
+
+    raise FileNotFoundError(
+        "transport include directory not found. Build the native transport or "
+        "install a wheel that bundles it."
+    )
+
+
+def _model_role(model_dir: Path) -> str:
+    """Return the generated model's wire role; missing means ``none``."""
+
+    model_json = model_dir / "model.json"
+    if not model_json.is_file():
+        return "none"
+    try:
+        payload = json.loads(model_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "none"
+    if not isinstance(payload, dict):
+        return "none"
+    role = payload.get("role")
+    return role if isinstance(role, str) and role else "none"
+
+
 def build_model(
     model_dir: str | Path,
     build_dir: str | Path | None = None,
     *,
     runtime_library: str | Path | None = None,
     runtime_include: str | Path | None = None,
+    transport_library: str | Path | None = None,
+    transport_include: str | Path | None = None,
     cmake_args: Iterable[str] = (),
 ) -> Path:
-    """Configure and build ``model_dir``; return the built shared library."""
+    """Configure and build ``model_dir``; return the built shared library.
+
+    A model whose ``model.json`` carries a wire role other than ``none`` also
+    links the static transport archive, so its backends register themselves.
+    A ``none`` model keeps the runtime-only link.
+    """
 
     source = Path(model_dir)
     if not source.is_dir():
@@ -107,6 +179,15 @@ def build_model(
             f"-DPYFMI_INTEROP_CMAKE_DIR={cmake_module}",
         ]
     )
+    if _model_role(source) != "none":
+        configure.extend(
+            [
+                f"-DPYFMI_INTEROP_TRANSPORT_INCLUDE_DIR="
+                f"{resolve_transport_include(transport_include)}",
+                f"-DPYFMI_INTEROP_TRANSPORT_LIBRARY="
+                f"{resolve_transport_library(transport_library)}",
+            ]
+        )
     configure.extend(str(argument) for argument in cmake_args)
 
     _run(configure, "CMake configuration")

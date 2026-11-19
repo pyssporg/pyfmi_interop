@@ -20,6 +20,7 @@ from pyfmi_interop.ir import (
     deterministic_guid,
 )
 from pyfmi_interop.schema import payload_message_name, proto_filename
+from pyfmi_interop.serialization.naming import field_identifiers
 
 pytestmark = [pytest.mark.cpp, pytest.mark.contract]
 
@@ -64,11 +65,12 @@ def _python_payload(model: ModelDefinition, descriptor_path: Path) -> bytes:
     )
     message_class = message_factory.GetMessageClass(descriptor)
     message = message_class()
+    fields = field_identifiers(model)
 
     for signal in sorted(
         model.signals, key=lambda item: (item.value_reference, item.name)
     ):
-        value = getattr(message, signal.name)
+        value = getattr(message, fields[signal.name])
         if signal.data_type is DataType.REAL:
             value.real = float(signal.initial or 0.0)
         elif signal.data_type is DataType.INTEGER:
@@ -145,6 +147,61 @@ def test_generated_model_frame_matches_python(tmp_path):
         instance=_INSTANCE,
         sequence=_SEQUENCE,
         timestamp_ns=_TIMESTAMP_NS,
+        payload_format=wire.PayloadFormat.PROTOBUF,
     ).hex()
 
     assert cpp_frame_hex == python_frame_hex
+
+
+@pytest.mark.skipif(shutil.which("cmake") is None, reason="cmake is not available")
+def test_generated_packed_frame_matches_python(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    library = native.bundled_library_path()
+    if not library.is_file():
+        library = native.default_runtime_library_path(repo_root)
+    if not library.is_file():
+        pytest.skip("native runtime library has not been built")
+    includes = native.runtime_include_dirs(repo_root)
+    if not includes:
+        pytest.skip("native runtime headers are not available")
+
+    from pyfmi_interop.serialization import packed
+
+    model = _make_model()
+    source = generate_model(model, tmp_path / "gen", serialization="packed")
+    build_dir = tmp_path / "build"
+    build_model(
+        source,
+        build_dir,
+        runtime_library=library,
+        runtime_include=includes[0],
+    )
+
+    executables = sorted(build_dir.rglob("wire_conformance"))
+    assert executables, "the generated project did not build wire_conformance"
+
+    environment = dict(os.environ)
+    library_path = environment.get("LD_LIBRARY_PATH", "")
+    environment["LD_LIBRARY_PATH"] = (
+        f"{build_dir}:{library_path}" if library_path else str(build_dir)
+    )
+    completed = subprocess.run(
+        [str(executables[0])],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    payload = packed.encode(model)
+    expected = wire.encode(
+        model,
+        payload,
+        instance=_INSTANCE,
+        sequence=_SEQUENCE,
+        timestamp_ns=_TIMESTAMP_NS,
+        payload_format=wire.PayloadFormat.PACKED,
+    ).hex()
+
+    assert completed.stdout.strip() == expected

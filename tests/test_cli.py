@@ -38,12 +38,20 @@ def write_fixture(tmp_path) -> Path:
     return path
 
 
-def test_transports_table_lists_only_byte_transports(capsys):
+def test_transports_table_lists_only_shipped_transports(capsys):
     assert cli.main(["transports"]) == 0
     output = capsys.readouterr().out
 
     assert "name" in output
-    assert set(output.split()[1:]) == {"udp", "tcp", "unix"}
+    assert set(output.split()[1:]) == {"loopback", "udp", "tcp"}
+
+
+def test_serializations_table_lists_the_backends(capsys):
+    assert cli.main(["serializations"]) == 0
+    output = capsys.readouterr().out
+
+    assert "name" in output
+    assert set(output.split()[1:]) == {"protobuf", "packed", "opaque"}
 
 
 def test_inspect_model_json(tmp_path, capsys):
@@ -68,6 +76,29 @@ def test_generate_from_model_json(tmp_path, capsys):
     assert (out_dir / "model_runtime.cpp").is_file()
     assert (out_dir / "CMakeLists.txt").is_file()
     assert (out_dir / "model.json").is_file()
+
+
+def test_generate_with_an_explicit_serialization(tmp_path, capsys):
+    path = write_fixture(tmp_path)
+    out_dir = tmp_path / "packed"
+
+    assert (
+        cli.main(
+            [
+                "generate",
+                "--model-json",
+                str(path),
+                "--out",
+                str(out_dir),
+                "--serialization",
+                "packed",
+            ]
+        )
+        == 0
+    )
+    assert "Generated model sources at" in capsys.readouterr().out
+    assert not (out_dir / "demo_model.proto").exists()
+    assert '"format": "packed"' in (out_dir / "wire.json").read_text(encoding="utf-8")
 
 
 def test_missing_model_json_is_an_error(tmp_path, capsys):
@@ -149,5 +180,13 @@ def test_schema_command_writes_both_artifacts(tmp_path, capsys):
 def test_help_lists_the_commands():
     help_text = cli.build_parser().format_help()
 
-    for command in ("transports", "inspect", "generate", "build", "package", "schema"):
+    for command in (
+        "transports",
+        "serializations",
+        "inspect",
+        "generate",
+        "build",
+        "package",
+        "schema",
+    ):
         assert command in help_text

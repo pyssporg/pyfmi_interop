@@ -1,30 +1,36 @@
-"""Project the IR onto the schema bundle that travels with an FMU.
+"""Backwards-compatible facade over the serialization backends.
 
-The bundle has two deterministic artifacts:
+Historically this module owned the protobuf emitter.  The emitter now lives in
+:mod:`pyfmi_interop.serialization.protobuf`; this module keeps the public names
+(``build_schema``, ``render_proto``, ``render_wire_json``, ``schema_entries``,
+``write_schema``, ``payload_message_name``, ...) working and adds a
+``serialization=`` selector for the packed and opaque backends.
 
-* ``<Model>.proto`` -- a proto3 payload schema whose field numbers are the
-  signal value references verbatim.  It is a shipped artifact, not an input to
-  a build step; nothing here needs ``protoc``.
-* ``wire.json`` -- a JSON descriptor naming the model, its derived wire model
-  id, its step size, every signal, and the rate groups.
-
-Both artifacts are pure functions of the :class:`~pyfmi_interop.ir.
-ModelDefinition`.  Ordering is explicit, JSON keys are sorted, floats use
-``repr``, and neither artifact contains a timestamp or a path, so emitting the
-same model twice is byte-identical.  A signal that cannot be projected raises
-:class:`~pyfmi_interop.ir.ProjectionError`; it is never dropped from the bundle.
+Only the selected backend's artifacts are returned.  A packed or opaque model
+therefore ships a ``wire.json`` without a ``.proto`` it never emitted.
 """
 
 from __future__ import annotations
 
-import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
-from .ir import ModelDefinition, ProjectionError, Signal
-from .wire import model_id
+from .ir import ModelDefinition
+from .serialization import get
+from .serialization.descriptor import (
+    SCHEMA_FORMAT_VERSION,
+    WIRE_JSON_NAME,
+)
+from .serialization.descriptor import (
+    render_wire_json as _render_wire_json,
+)
+from .serialization.protobuf import (
+    PROTO_PACKAGE,
+    payload_message_name,
+    proto_filename,
+    render_proto,
+)
 
 __all__ = [
     "PROTO_PACKAGE",
@@ -40,226 +46,72 @@ __all__ = [
     "write_schema",
 ]
 
-#: Version of the schema bundle layout itself (not the wire envelope).
-SCHEMA_FORMAT_VERSION = 1
-
-#: Proto package shared with the wire envelope.
-PROTO_PACKAGE = "pyfmi_interop.wire"
-
-#: Fixed descriptor filename; it sits next to the model payload schema.
-WIRE_JSON_NAME = "wire.json"
-
-#: The single value message every payload field references.
-_VALUE_MESSAGE = """\
-// One signal sample: exactly one member is set.  `string` carries UTF-8 bytes
-// bounded by the signal capacity recorded on the payload field.
-message Value {
-  oneof kind {
-    double real = 1;
-    sint64 integer = 2;
-    bool boolean = 3;
-    bytes string = 4;
-  }
-}
-"""
-
 
 @dataclass(frozen=True)
 class SchemaBundle:
-    """The two artifacts projected from one model definition."""
+    """The artifacts projected from one model by one backend."""
 
-    proto_name: str
-    proto: bytes
+    serialization: str
+    format_id: int
+    artifacts: Mapping[str, bytes]
+    proto_name: str | None
+    proto: bytes | None
     wire_json_name: str
     wire_json: bytes
 
 
-def proto_filename(model: ModelDefinition) -> str:
-    """Return the payload schema filename for ``model``."""
+def render_wire_json(
+    model: ModelDefinition, *, serialization: str = "protobuf"
+) -> str:
+    """Return the deterministic JSON descriptor for ``model``."""
 
-    return f"{model.name}.proto"
-
-
-def payload_message_name(model: ModelDefinition) -> str:
-    """Return the payload message name declared in ``<Model>.proto``."""
-
-    parts = [part for part in model.name.split("_") if part]
-    camel = "".join(part[:1].upper() + part[1:] for part in parts)
-    return f"{camel or 'Model'}Payload"
-
-
-# Kept as the internal spelling used below; the public name is
-# `payload_message_name` so codegen and the schema emitter cannot drift.
-_payload_message = payload_message_name
-
-
-def _projected_signals(model: ModelDefinition) -> tuple[Signal, ...]:
-    """Return signals in id order, rejecting anything the wire cannot carry."""
-
-    ordered = sorted(model.signals, key=lambda item: (item.value_reference, item.name))
-    seen_ids: dict[int, str] = {}
-    seen_names: set[str] = set()
-    for signal in ordered:
-        signal.check_projection()
-        if signal.name in seen_names:
-            raise ProjectionError("duplicate signal name", signal_name=signal.name)
-        previous = seen_ids.get(signal.value_reference)
-        if previous is not None:
-            raise ProjectionError(
-                f"duplicate value reference {signal.value_reference} "
-                f"(also used by {previous!r})",
-                signal_name=signal.name,
-            )
-        if signal.unit is not None and (
-            "\n" in signal.unit or "\r" in signal.unit
-        ):
-            raise ProjectionError(
-                "unit must not contain line breaks", signal_name=signal.name
-            )
-        seen_ids[signal.value_reference] = signal.name
-        seen_names.add(signal.name)
-    return tuple(ordered)
-
-
-def _format_float(value: float) -> str:
-    number = float(value)
-    if not math.isfinite(number):
-        raise ProjectionError(f"non-finite floating point value: {number!r}")
-    if number == 0.0:
-        number = 0.0
-    return repr(number)
-
-
-def _comment_value(signal: Signal) -> str:
-    rate = "base" if signal.rate_hz is None else f"{_format_float(signal.rate_hz)} Hz"
-    if signal.unit is None:
-        unit = "unspecified"
-    elif signal.unit == "":
-        unit = "dimensionless"
-    else:
-        unit = signal.unit
-    return (
-        f"name={signal.name} type={signal.data_type.value} "
-        f"direction={signal.direction.value} rate={rate} unit={unit} "
-        f"capacity={signal.wire_capacity}"
+    backend = get(serialization)
+    return _render_wire_json(
+        model, serialization=backend.name, format_id=backend.format_id
     )
 
 
-def render_proto(model: ModelDefinition) -> str:
-    """Return the deterministic proto3 payload schema for ``model``."""
+def build_schema(
+    model: ModelDefinition, *, serialization: str = "protobuf"
+) -> SchemaBundle:
+    """Project ``model`` onto the artifacts of ``serialization``."""
 
-    signals = _projected_signals(model)
-    message = _payload_message(model)
-    lines = [
-        "// Generated by pyfmi_interop. Do not edit by hand.",
-        f"// Schema format version: {SCHEMA_FORMAT_VERSION}",
-        f"// Model: {model.name}",
-        f"// GUID: {model.guid}",
-        f"// Model id: {model_id(model).hex()}",
-        "",
-        'syntax = "proto3";',
-        "",
-        f"package {PROTO_PACKAGE};",
-        "",
-        _VALUE_MESSAGE,
-        f'// Payload for one step of model "{model.name}".',
-        f"message {message} {{",
-        "  reserved 19000 to 19999;",
-    ]
-    if signals:
-        lines.append("")
-    for signal in signals:
-        lines.append(f"  // {_comment_value(signal)}")
-        lines.append(f"  Value {signal.name} = {signal.value_reference};")
-    lines.append("}")
-    return "\n".join(lines) + "\n"
-
-
-def render_wire_json(model: ModelDefinition) -> str:
-    """Return the deterministic JSON descriptor for ``model``."""
-
-    signals = _projected_signals(model)
-    payload = {
-        "format_version": SCHEMA_FORMAT_VERSION,
-        "guid": model.guid,
-        "model": model.name,
-        "model_id": model_id(model).hex(),
-        "payload_message": _payload_message(model),
-        "proto_package": PROTO_PACKAGE,
-        "rate_groups": [
-            {
-                "name": group.name,
-                "period_s": _stable_float(group.period_s, "rate group period_s"),
-                "deadline_s": _stable_float(
-                    group.deadline_s, "rate group deadline_s"
-                ),
-                "signals": sorted(group.signals),
-            }
-            for group in sorted(model.rate_groups, key=lambda item: item.name)
-        ],
-        "signals": [
-            {
-                "id": signal.value_reference,
-                "name": signal.name,
-                "data_type": signal.data_type.value,
-                "direction": signal.direction.value,
-                "rate_hz": (
-                    None
-                    if signal.rate_hz is None
-                    else _stable_float(signal.rate_hz, "signal rate_hz")
-                ),
-                "unit": signal.unit,
-                "capacity": signal.wire_capacity,
-            }
-            for signal in signals
-        ],
-        "step_size_s": _stable_float(model.step_size_s, "step_size_s"),
-    }
-    return json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
-
-
-def _stable_float(value: float, label: str) -> float:
-    number = float(value)
-    if not math.isfinite(number):
-        raise ProjectionError(f"non-finite {label}: {number!r}")
-    return 0.0 if number == 0.0 else number
-
-
-def build_schema(model: ModelDefinition) -> SchemaBundle:
-    """Project ``model`` onto both artifacts, as UTF-8 bytes."""
-
+    backend = get(serialization)
+    artifacts = backend.schema_files(model)
+    proto_name = proto_filename(model) if backend.name == "protobuf" else None
     return SchemaBundle(
-        proto_name=proto_filename(model),
-        proto=render_proto(model).encode("utf-8"),
+        serialization=backend.name,
+        format_id=backend.format_id,
+        artifacts=artifacts,
+        proto_name=proto_name,
+        proto=artifacts.get(proto_name) if proto_name is not None else None,
         wire_json_name=WIRE_JSON_NAME,
-        wire_json=render_wire_json(model).encode("utf-8"),
+        wire_json=artifacts[WIRE_JSON_NAME],
     )
 
 
 def schema_entries(
-    model: ModelDefinition, *, prefix: str | None = None
+    model: ModelDefinition,
+    *,
+    prefix: str | None = None,
+    serialization: str = "protobuf",
 ) -> dict[str, bytes]:
-    """Return ``{archive name: bytes}`` for the bundle, optionally prefixed."""
+    """Return ``{archive name: bytes}`` for the backend's artifacts."""
 
-    bundle = build_schema(model)
-    names: Iterable[tuple[str, bytes]] = (
-        (bundle.proto_name, bundle.proto),
-        (bundle.wire_json_name, bundle.wire_json),
-    )
+    bundle = build_schema(model, serialization=serialization)
+    names: Iterable[tuple[str, bytes]] = sorted(bundle.artifacts.items())
     if prefix is None:
         return dict(names)
     base = prefix.strip("/")
     return {f"{base}/{name}": data for name, data in names}
 
 
-def write_schema(model: ModelDefinition, directory: str | Path) -> tuple[Path, Path]:
-    """Write both artifacts into ``directory`` and return their paths."""
+def write_schema(
+    model: ModelDefinition,
+    directory: str | Path,
+    *,
+    serialization: str = "protobuf",
+) -> tuple[Path, ...]:
+    """Write the backend's artifacts into ``directory`` and return their paths."""
 
-    bundle = build_schema(model)
-    target = Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-    proto_path = target / bundle.proto_name
-    wire_json_path = target / bundle.wire_json_name
-    proto_path.write_bytes(bundle.proto)
-    wire_json_path.write_bytes(bundle.wire_json)
-    return proto_path, wire_json_path
+    return tuple(get(serialization).emit_schema(model, directory))

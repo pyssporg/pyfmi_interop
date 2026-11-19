@@ -12,8 +12,6 @@ constexpr std::uint32_t kCrc32Polynomial = 0xEDB88320u;
 constexpr std::uint32_t kCrc32Init = 0xFFFFFFFFu;
 constexpr std::uint32_t kCrc32XorOut = 0xFFFFFFFFu;
 
-// Offset of the header CRC field: the CRC covers bytes [0, 44).
-constexpr std::size_t kHeaderCrcOffset = 44;
 
 std::uint32_t crc32_table_entry(std::uint32_t index) noexcept {
     std::uint32_t value = index;
@@ -204,6 +202,12 @@ const char* error_code_name(ErrorCode code) noexcept {
             return "UnsupportedWireVersion";
         case ErrorCode::InvalidHeaderSize:
             return "InvalidHeaderSize";
+        case ErrorCode::NonZeroFlags:
+            return "NonZeroFlags";
+        case ErrorCode::NonZeroReserved:
+            return "NonZeroReserved";
+        case ErrorCode::UnsupportedPayloadFormat:
+            return "UnsupportedPayloadFormat";
         case ErrorCode::TruncatedFrame:
             return "TruncatedFrame";
         case ErrorCode::LengthOverflow:
@@ -220,6 +224,26 @@ const char* error_code_name(ErrorCode code) noexcept {
             return "FieldRangeError";
     }
     return "WireError";
+}
+
+const char* payload_format_name(PayloadFormat format) noexcept {
+    switch (format) {
+        case PayloadFormat::Opaque:
+            return "opaque";
+        case PayloadFormat::Protobuf:
+            return "protobuf";
+        case PayloadFormat::Packed:
+            return "packed";
+    }
+    return "unknown";
+}
+
+PayloadFormat default_payload_format() noexcept {
+#if defined(PYFMI_INTEROP_WIRE_PROTOBUF)
+    return PayloadFormat::Protobuf;
+#else
+    return PayloadFormat::Opaque;
+#endif
 }
 
 std::uint32_t crc32(const std::uint8_t* data, std::size_t size) noexcept {
@@ -276,7 +300,8 @@ std::array<std::uint8_t, kModelIdSize> model_id(
 
 EncodeResult encode_frame(const std::array<std::uint8_t, kModelIdSize>& model_id,
                           std::string_view payload, std::uint32_t instance,
-                          std::uint64_t sequence, std::uint64_t timestamp_ns) {
+                          std::uint64_t sequence, std::uint64_t timestamp_ns,
+                          PayloadFormat format) {
     EncodeResult result;
     if (payload.size() > std::numeric_limits<std::uint32_t>::max()) {
         result.error = {ErrorCode::LengthOverflow, "payload exceeds uint32 length"};
@@ -286,6 +311,13 @@ EncodeResult encode_frame(const std::array<std::uint8_t, kModelIdSize>& model_id
     if (total > std::numeric_limits<std::uint32_t>::max()) {
         result.error = {ErrorCode::LengthOverflow,
                         "payload length plus header size exceeds uint32"};
+        return result;
+    }
+    if (format != PayloadFormat::Opaque && format != PayloadFormat::Protobuf &&
+        format != PayloadFormat::Packed) {
+        result.error = {ErrorCode::FieldRangeError,
+                        "payload_format is not supported (opaque=0, protobuf=1, "
+                        "packed=2)"};
         return result;
     }
 
@@ -302,6 +334,9 @@ EncodeResult encode_frame(const std::array<std::uint8_t, kModelIdSize>& model_id
     write_u64(prefix + 28, timestamp_ns);
     write_u32(prefix + 36, static_cast<std::uint32_t>(payload.size()));
     write_u32(prefix + 40, payload_crc32);
+    write_u16(prefix + 44, static_cast<std::uint16_t>(format));
+    write_u16(prefix + 46, 0);  // flags
+    write_u32(prefix + 48, 0);  // reserved
 
     const std::uint32_t header_crc32 = crc32(prefix, kHeaderCrcOffset);
     write_u32(prefix + kHeaderCrcOffset, header_crc32);
@@ -319,7 +354,7 @@ DecodeResult decode_frame(std::string_view buffer) {
     if (buffer.size() < kHeaderSize) {
         result.error = {ErrorCode::TruncatedFrame,
                         "buffer holds " + std::to_string(buffer.size()) +
-                            " bytes, shorter than the 48-byte header"};
+                            " bytes, shorter than the 56-byte header"};
         return result;
     }
 
@@ -333,7 +368,10 @@ DecodeResult decode_frame(std::string_view buffer) {
     header.timestamp_ns = read_u64(data + 28);
     header.payload_length = read_u32(data + 36);
     header.payload_crc32 = read_u32(data + 40);
-    header.header_crc32 = read_u32(data + 44);
+    const std::uint16_t raw_format = read_u16(data + 44);
+    header.flags = read_u16(data + 46);
+    header.reserved = read_u32(data + 48);
+    header.header_crc32 = read_u32(data + 52);
 
     static constexpr std::array<std::uint8_t, 4> magic{{'P', 'F', 'M', 'I'}};
     if (header.magic != magic) {
@@ -343,13 +381,24 @@ DecodeResult decode_frame(std::string_view buffer) {
     if (header.wire_version != kWireVersion) {
         result.error = {ErrorCode::UnsupportedWireVersion,
                         "wire version " + std::to_string(header.wire_version) +
-                            " is not supported (expected 1)"};
+                            " is not supported (expected 2)"};
         return result;
     }
     if (header.header_size != kHeaderSize) {
         result.error = {ErrorCode::InvalidHeaderSize,
                         "header size " + std::to_string(header.header_size) +
-                            " does not match 48"};
+                            " does not match 56"};
+        return result;
+    }
+    if (header.flags != 0) {
+        result.error = {ErrorCode::NonZeroFlags,
+                        "flags must be zero, got " + std::to_string(header.flags)};
+        return result;
+    }
+    if (header.reserved != 0) {
+        result.error = {ErrorCode::NonZeroReserved,
+                        "reserved field must be zero, got " +
+                            std::to_string(header.reserved)};
         return result;
     }
 
@@ -358,6 +407,16 @@ DecodeResult decode_frame(std::string_view buffer) {
         result.error = {ErrorCode::HeaderChecksumError, "header CRC32 mismatch"};
         return result;
     }
+
+    if (raw_format != static_cast<std::uint16_t>(PayloadFormat::Opaque) &&
+        raw_format != static_cast<std::uint16_t>(PayloadFormat::Protobuf) &&
+        raw_format != static_cast<std::uint16_t>(PayloadFormat::Packed)) {
+        result.error = {ErrorCode::UnsupportedPayloadFormat,
+                        "payload format " + std::to_string(raw_format) +
+                            " is not supported"};
+        return result;
+    }
+    header.payload_format = static_cast<PayloadFormat>(raw_format);
 
     const std::uint64_t max_payload =
         std::numeric_limits<std::uint32_t>::max() - static_cast<std::uint64_t>(kHeaderSize);

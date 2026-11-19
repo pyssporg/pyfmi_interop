@@ -147,6 +147,7 @@ def test_model_from_architecture_maps_signals_rates_and_units() -> None:
     model = sysml.model_from_architecture(_architecture())
 
     assert model.name == "Demo"
+    assert model.interface == "Plant"
     assert model.guid == ir.deterministic_guid("Demo")
     assert model.step_size_s == pytest.approx(0.01)
     assert [signal.name for signal in model.signals] == ["out.label", "out.value"]

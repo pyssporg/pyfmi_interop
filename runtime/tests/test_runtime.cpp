@@ -4,6 +4,8 @@
 #include "pyfmi_interop/runtime/transport.hpp"
 
 #include <chrono>
+#include <cstddef>
+#include <optional>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -78,55 +80,34 @@ int main() {
         return fail("Sample::clear_valid");
     }
 
-    // Loopback round trip.
+    // Loopback byte round trip and stale drop.
     LoopbackTransport loopback;
-    TransportConfig loopback_config;
-    loopback_config.name = "loopback";
-    loopback_config.options.emplace_back("signal_count", "4");
-    std::string error;
-    if (!loopback.initialize(loopback_config, error)) {
-        return fail("loopback initialize");
-    }
-    if (!loopback.available()) {
-        return fail("loopback available");
-    }
-
-    Sample outbound;
-    outbound.resize(4);
-    outbound.simulation_time = 1.25;
-    outbound.values[0] = Value::make_real(3.0);
-    outbound.values[1] = Value::make_integer(5);
-    outbound.values[2] = Value::make_boolean(true);
-    outbound.values[3] = Value::make_string("loop");
-    outbound.valid[0] = 1;
-    outbound.valid[1] = 1;
-    outbound.valid[2] = 1;
-    outbound.valid[3] = 1;
-    if (!loopback.send(outbound, error)) {
+    loopback.initialize("loopback");
+    const std::vector<std::byte> outbound{std::byte{0x01}, std::byte{0x02},
+                                          std::byte{0x03}};
+    if (!loopback.send(outbound)) {
         return fail("loopback send");
     }
+    const std::optional<std::vector<std::byte>> inbound = loopback.receive();
+    if (!inbound || *inbound != outbound) {
+        return fail("loopback round-trip bytes");
+    }
+    if (!loopback.send(outbound) || !loopback.send(outbound) ||
+        loopback.stats().dropped_stale != 1) {
+        return fail("loopback stale frame accounting");
+    }
+    (void)loopback.receive();
 
-    Sample inbound;
-    inbound.resize(4);
-    if (!loopback.receive(inbound, error)) {
-        return fail("loopback receive");
-    }
-    if (inbound.simulation_time != 1.25 || !inbound.is_valid(3) ||
-        inbound.values[0].real_value != 3.0 ||
-        inbound.values[1].integer_value != 5 ||
-        !inbound.values[2].boolean_value ||
-        inbound.values[3].string_value != "loop") {
-        return fail("loopback round-trip payload");
-    }
-
-    // Registry.
-    std::string registry_error;
-    if (make_transport("does-not-exist", registry_error) != nullptr) {
-        return fail("unknown transport must return nullptr");
-    }
-    if (registry_error.find("unknown transport") == std::string::npos ||
-        registry_error.find("loopback") == std::string::npos) {
-        return fail("unknown transport error text");
+    // Registry: unknown names throw with the available names.
+    try {
+        (void)make_transport("does-not-exist");
+        return fail("unknown transport must throw");
+    } catch (const TransportError& error) {
+        const std::string message = error.what();
+        if (message.find("unknown transport") == std::string::npos ||
+            message.find("loopback") == std::string::npos) {
+            return fail("unknown transport error text");
+        }
     }
     const std::vector<std::string> names = transport_names();
     bool has_loopback = false;
@@ -135,9 +116,8 @@ int main() {
             has_loopback = true;
         }
     }
-    if (!has_loopback || !transport_available("loopback") ||
-        transport_available("does-not-exist")) {
-        return fail("transport registry queries");
+    if (!has_loopback) {
+        return fail("transport registry names");
     }
 
     // Scheduler: fixed step count without realtime pacing.

@@ -20,6 +20,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from pyfmi_interop.native import (  # noqa: E402
     default_runtime_library_path,
     runtime_library_name,
+    transport_library_name,
+    transport_search_paths,
 )
 
 
@@ -47,15 +49,46 @@ class build_py(_build_py):
                 "for a source-only install."
             )
 
+        transport_source = next(
+            (
+                candidate
+                for candidate in transport_search_paths(ROOT)
+                if candidate.is_file()
+            ),
+            None,
+        )
+        if transport_source is None:
+            # Same policy as the runtime: an editable develop install may find
+            # the archive in the source tree, but a wheel must ship it.
+            if not (
+                getattr(self, "editable_mode", False)
+                or os.environ.get("PYFMI_INTEROP_ALLOW_MISSING_RUNTIME") == "1"
+            ):
+                raise FileNotFoundError(
+                    "native transport library not found. Run "
+                    "'cmake -S . -B build && cmake --build build' before "
+                    "building the wheel, or set "
+                    "PYFMI_INTEROP_ALLOW_MISSING_RUNTIME=1 for a source-only install."
+                )
+
         destination_dir = Path(self.build_lib) / "pyfmi_interop" / "_runtime"
         destination_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination_dir / runtime_library_name())
+        if transport_source is not None:
+            shutil.copy2(
+                transport_source, destination_dir / transport_library_name()
+            )
 
         headers_source = ROOT / "runtime" / "include"
         headers_target = destination_dir / "include"
         if headers_target.exists():
             shutil.rmtree(headers_target)
         shutil.copytree(headers_source, headers_target)
+        # Both headers share the pyfmi_interop/ root, so merge rather than
+        # replace the runtime headers.
+        shutil.copytree(
+            ROOT / "transport" / "include", headers_target, dirs_exist_ok=True
+        )
 
         cmake_target_dir = destination_dir / "cmake"
         cmake_target_dir.mkdir(parents=True, exist_ok=True)

@@ -1,11 +1,13 @@
-"""Versioned, CRC-protected envelope around an opaque protobuf payload.
+"""Versioned, CRC-protected envelope around a payload.
 
-The envelope is little-endian and packed with :mod:`struct` (standard sizes,
-no padding, no alignment requirement).  The payload is opaque bytes: this
-module never parses it and has no protobuf dependency.
+Wire version 2 fixes a 56-byte little-endian header and adds an explicit
+``payload_format`` tag so a decoder can tell opaque bytes (``0``), a protobuf
+payload (``1``), and a packed payload (``2``) apart.  The envelope is packed
+with :mod:`struct` (standard sizes, no padding, no alignment requirement) and
+never parses the payload.
 
-Encoding is deterministic: equal model, payload, instance, sequence, and
-timestamp produce byte-identical frames.  The codec never reads the clock;
+Encoding is deterministic: equal model, payload, instance, sequence, format,
+and timestamp produce byte-identical frames.  The codec never reads the clock;
 ``sequence`` and ``timestamp_ns`` are always caller-supplied.
 """
 
@@ -15,18 +17,22 @@ import hashlib
 import struct
 import zlib
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Any
 
 from ..ir import ModelDefinition
 from .errors import (
     FieldRangeError,
     HeaderChecksumError,
+    InvalidFlags,
     InvalidHeaderSize,
     InvalidMagic,
+    InvalidReserved,
     LengthOverflow,
     PayloadChecksumError,
     TrailingBytes,
     TruncatedFrame,
+    UnsupportedPayloadFormat,
     UnsupportedWireVersion,
 )
 
@@ -35,6 +41,7 @@ __all__ = [
     "HEADER_SIZE",
     "Header",
     "MODEL_ID_SIZE",
+    "PayloadFormat",
     "WIRE_MAGIC",
     "WIRE_VERSION",
     "decode",
@@ -46,14 +53,24 @@ __all__ = [
 WIRE_MAGIC = b"PFMI"
 
 #: Envelope format version.  Bump only with an incompatible layout change.
-WIRE_VERSION = 1
+WIRE_VERSION = 2
 
 #: Length of the derived model id.
 MODEL_ID_SIZE = 8
 
+
+class PayloadFormat(IntEnum):
+    """Values of the 16-bit ``payload_format`` header field."""
+
+    OPAQUE = 0
+    PROTOBUF = 1
+    PACKED = 2
+
+
 #: Header fields before the header CRC: magic, version, header size, model id,
-#: instance, sequence, timestamp, payload length, payload CRC.
-_PREFIX = struct.Struct("<4sHH8sIQQII")
+#: instance, sequence, timestamp, payload length, payload CRC, payload format,
+#: flags, reserved.
+_PREFIX = struct.Struct("<4sHH8sIQQIIHHI")
 #: The trailing header CRC32 field.
 _U32 = struct.Struct("<I")
 
@@ -62,10 +79,13 @@ HEADER_SIZE = _PREFIX.size + _U32.size
 #: Offset of the header CRC32 field; the CRC covers ``0 .. HEADER_CRC_OFFSET``.
 HEADER_CRC_OFFSET = _PREFIX.size
 
-assert HEADER_SIZE == 48
+assert HEADER_SIZE == 56
+assert HEADER_CRC_OFFSET == 52
 
 #: Domain separator for :func:`model_id`; changing it changes every id.
 _MODEL_ID_DOMAIN = b"pyfmi_interop.model-id.v1\x00"
+
+_SUPPORTED_FORMATS = frozenset(int(member) for member in PayloadFormat)
 
 
 @dataclass(frozen=True)
@@ -74,8 +94,9 @@ class Header:
 
     ``model_id`` is the derived interface identity, ``instance`` identifies one
     running instance, ``sequence`` orders frames from that instance, and
-    ``timestamp_ns`` is the caller's nanosecond timestamp.  The CRC fields are
-    carried so a decoded frame can be re-encoded or audited without guessing.
+    ``timestamp_ns`` is the caller's nanosecond timestamp.  ``payload_format``
+    names the payload encoding.  The CRC fields are carried so a decoded frame
+    can be re-encoded or audited without guessing.
     """
 
     magic: bytes
@@ -87,6 +108,9 @@ class Header:
     timestamp_ns: int
     payload_length: int
     payload_crc32: int
+    payload_format: int
+    flags: int
+    reserved: int
     header_crc32: int
 
 
@@ -101,7 +125,8 @@ class DecodedFrame:
 def model_id(model: ModelDefinition) -> bytes:
     """Derive the 8-byte interface identity of ``model``.
 
-    The digest input is, in order:
+    The derivation is unchanged from wire version 1 so existing identities stay
+    stable.  The digest input is, in order:
 
     * the domain separator ``b"pyfmi_interop.model-id.v1\\x00"``;
     * ``model.name`` encoded as UTF-8 followed by one NUL byte;
@@ -117,8 +142,12 @@ def model_id(model: ModelDefinition) -> bytes:
     digest.update(model.name.encode("utf-8"))
     digest.update(b"\x00")
     digest.update(struct.pack("<d", model.step_size_s))
-    for signal in sorted(model.signals, key=lambda item: (item.value_reference, item.name)):
-        digest.update(struct.pack("<IB", signal.value_reference, signal.data_type.number))
+    for signal in sorted(
+        model.signals, key=lambda item: (item.value_reference, item.name)
+    ):
+        digest.update(
+            struct.pack("<IB", signal.value_reference, signal.data_type.number)
+        )
     return digest.digest()[:MODEL_ID_SIZE]
 
 
@@ -129,13 +158,16 @@ def encode(
     instance: int,
     sequence: int,
     timestamp_ns: int,
+    payload_format: int | PayloadFormat = PayloadFormat.OPAQUE,
 ) -> bytes:
-    """Wrap ``payload`` in a header and return the complete frame.
+    """Wrap ``payload`` in a v2 header and return the complete frame.
 
     ``instance`` must fit uint32; ``sequence`` and ``timestamp_ns`` must fit
-    uint64, and the payload must fit uint32.  Out-of-range values raise
-    :class:`~.FieldRangeError` or :class:`~.LengthOverflow`; the codec does not
-    truncate.  The timestamp is used verbatim and never read from the clock.
+    uint64, and the payload must fit uint32.  ``payload_format`` must be one of
+    :class:`PayloadFormat`.  ``flags`` and ``reserved`` are always zero in an
+    encoded frame.  Out-of-range values raise :class:`~.FieldRangeError` or
+    :class:`~.LengthOverflow`; the codec does not truncate.  The timestamp is
+    used verbatim and never read from the clock.
     """
 
     if not isinstance(payload, (bytes, bytearray, memoryview)):
@@ -144,6 +176,7 @@ def encode(
     _require_uint(instance, 32, "instance")
     _require_uint(sequence, 64, "sequence")
     _require_uint(timestamp_ns, 64, "timestamp_ns")
+    format_id = _format_value(payload_format)
     if len(body) > 0xFFFFFFFF:
         raise LengthOverflow(f"payload is {len(body)} bytes, exceeding uint32 length")
     if HEADER_SIZE + len(body) > 0xFFFFFFFF:
@@ -160,18 +193,21 @@ def encode(
         timestamp_ns,
         len(body),
         payload_crc32,
+        format_id,
+        0,
+        0,
     )
     header_crc32 = zlib.crc32(prefix) & 0xFFFFFFFF
     return prefix + _U32.pack(header_crc32) + body
 
 
 def decode(buf: bytes | bytearray | memoryview) -> DecodedFrame:
-    """Validate ``buf`` as one frame and return its header and payload.
+    """Validate ``buf`` as one v2 frame and return its header and payload.
 
     Checks, in order: fixed-header truncation, magic, wire version, header
-    size, header CRC32, declared length, trailing bytes, payload CRC32.  Every
-    failure is a :class:`~.WireError` subclass; a ``struct.error`` never
-    escapes.
+    size, flags, reserved, header CRC32, payload format, declared length,
+    trailing bytes, payload CRC32.  Every failure is a :class:`~.WireError`
+    subclass; a ``struct.error`` never escapes.
     """
 
     if not isinstance(buf, (bytes, bytearray, memoryview)):
@@ -200,6 +236,9 @@ def decode(buf: bytes | bytearray | memoryview) -> DecodedFrame:
         timestamp_ns,
         payload_length,
         payload_crc32,
+        payload_format,
+        flags,
+        reserved,
     ) = prefix
 
     if magic != WIRE_MAGIC:
@@ -212,10 +251,19 @@ def decode(buf: bytes | bytearray | memoryview) -> DecodedFrame:
         raise InvalidHeaderSize(
             f"header size {header_size} does not match {HEADER_SIZE}"
         )
+    if flags != 0:
+        raise InvalidFlags(f"flags must be zero, got {flags}")
+    if reserved != 0:
+        raise InvalidReserved(f"reserved must be zero, got {reserved}")
     actual_header_crc32 = zlib.crc32(view[:HEADER_CRC_OFFSET]) & 0xFFFFFFFF
     if actual_header_crc32 != header_crc32:
         raise HeaderChecksumError(
             f"header CRC32 {header_crc32:#010x} != {actual_header_crc32:#010x}"
+        )
+    if payload_format not in _SUPPORTED_FORMATS:
+        raise UnsupportedPayloadFormat(
+            f"payload format {payload_format} is not supported "
+            f"(opaque=0, protobuf=1, packed=2)"
         )
 
     if payload_length > 0xFFFFFFFF - HEADER_SIZE:
@@ -247,9 +295,26 @@ def decode(buf: bytes | bytearray | memoryview) -> DecodedFrame:
         timestamp_ns=timestamp_ns,
         payload_length=payload_length,
         payload_crc32=payload_crc32,
+        payload_format=payload_format,
+        flags=flags,
+        reserved=reserved,
         header_crc32=header_crc32,
     )
     return DecodedFrame(header=header, payload=payload)
+
+
+def _format_value(value: int | PayloadFormat) -> int:
+    if isinstance(value, bool):
+        raise FieldRangeError("payload_format must be an integer")
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as error:
+        raise FieldRangeError("payload_format must be an integer") from error
+    if number not in _SUPPORTED_FORMATS:
+        raise FieldRangeError(
+            f"payload_format {number} is not supported (opaque=0, protobuf=1, packed=2)"
+        )
+    return number
 
 
 def _require_uint(value: Any, bits: int, name: str) -> None:
