@@ -38,11 +38,11 @@ dependencies = []
 
 [project.optional-dependencies]
 # SysML ingestion is optional so the runtime/codegen path can be installed and
-# tested without the SysML dialect packages.  Inside the pyssp workspace these
-# are installed editable from checks, not resolved from this list.
+# tested without the SysML dialect packages.  Inside the pyssp workspace they
+# are installed editable from the checkout, which shadows these release pins.
 sysml = [
-  "pycps-sysml2",
-  "pyfmi-sysml2",
+  "pycps-sysml2 @ https://github.com/pyssporg/pycps_sysml2/releases/download/v0.2.0/pycps_sysml2-0.2.0-py3-none-any.whl",
+  "pyfmi-sysml2 @ https://github.com/pyssporg/pyfmi_sysml2/releases/download/v0.2.0/pyfmi_sysml2-0.2.0-py3-none-any.whl",
 ]
 dev = [
   "pytest>=8",
