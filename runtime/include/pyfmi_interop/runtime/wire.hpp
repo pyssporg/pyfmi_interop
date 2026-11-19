@@ -105,10 +105,10 @@ struct ModelIdSignal {
 };
 
 // Derived interface identity: first 8 bytes of SHA-256 over the domain
-// separator, model name + NUL, little-endian double step size, then one record
-// per signal ordered by value reference.
+// separator, model name + NUL, then one record per signal ordered by value
+// reference.  Timing is not part of the identity.
 std::array<std::uint8_t, kModelIdSize> model_id(
-    std::string_view name, double step_size_s,
+    std::string_view name,
     const std::vector<ModelIdSignal>& signals);
 
 std::uint32_t crc32(const std::uint8_t* data, std::size_t size) noexcept;

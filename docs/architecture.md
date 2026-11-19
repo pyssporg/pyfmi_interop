@@ -100,12 +100,14 @@ ModelDefinition IR ─► serializer ─► framing ─► transport
   endpoints come from the environment or a manifest, never SSD/SSP content, so
   an SSP stays portable.
 
-One message carries the whole part definition: every signal field of every
-port, with the field number equal to the value reference and field order equal
-to the canonical signal-name order the value references are assigned in. That
-order is stable when ports are reordered in SysML; variable names, not value
-references, are what an SSP connector binds to. Direction follows FMI
-causality:
+One message carries the whole part definition: every input and output signal
+field of every port, numbered `1..n` in the canonical signal-name order, with
+parameters excluded. FMI value references are a separate namespace assigned by
+the generated interface — zero-based, declaration order, parameters included —
+so `wire.json` carries both and a parameter edit never renumbers the wire or
+moves `model_id`. That order is stable when ports are reordered in SysML;
+variable names, not value references, are what an SSP connector binds to.
+Direction follows FMI causality:
 
 | FMI causality | Adapter role | Wire direction |
 | --- | --- | --- |

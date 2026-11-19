@@ -101,25 +101,25 @@ The layout is intentionally incompatible. A v1 reader sees wire version `2`
 at offset 4 and raises `UnsupportedWireVersion`; it never misreads a v2 frame
 as v1. A v2 reader likewise rejects a v1 frame (`wire version 1 is not
 supported (expected 2)`). There is no dual-version decoder: both ends must be
-upgraded together. `model_id` derivation is unchanged, so an interface
-identity is comparable across the version bump.
+upgraded together. The `model_id` domain separator moved to v2 with the same
+bump, so a v1 identity and a v2 identity can never be confused.
 
 ## Model id derivation
 
 `model_id(model)` returns the first 8 bytes of SHA-256 over this exact byte
-sequence (the domain separator keeps its v1 name and value):
+sequence (the domain separator is `model-id.v2`):
 
-1. the domain separator `b"pyfmi_interop.model-id.v1\x00"`;
+1. the domain separator `b"pyfmi_interop.model-id.v2\x00"`;
 2. `model.name` encoded as UTF-8, followed by one NUL byte (`b"\x00"`);
-3. `model.step_size_s` as an IEEE 754 double, little-endian (`struct.pack("<d", ...)`);
-4. for each signal ordered by `(value_reference, name)`, one record:
+3. for each signal ordered by `(value_reference, name)`, one record:
    `value_reference` as uint32 little-endian, then `DataType.number` as uint8
    (`struct.pack("<IB", ...)`).
 
-Direction, names other than the model name, units, rates, capacities, and
-initial values are **not** part of the id. Adding, removing, renumbering, or
-retyping a signal, changing the model name, or changing the step size changes
-the id.
+The identity is the wire interface and nothing else. Direction, names other
+than the model name, units, rates, capacities, initial values, and the step size
+are **not** part of the id. Adding, removing, renumbering, or retyping a signal
+or changing the model name changes the id; changing a step size or a declared
+rate does not.
 
 ## CRC-32 definition
 
@@ -168,9 +168,9 @@ Model `demo`, step size `0.01`, signals `alpha` (id 1, real/output) and `beta`
 `1_700_000_000_000_000_000` ns, payload format opaque (the encoder default), payload `b"hello"`:
 
 ```
-50464d49 0200 3800 ee78acea761957f0
+50464d49 0200 3800 d6b64a33d05b491b
 07000000 2a00000000000000 00002a36fe9c9717
-05000000 86a61036 0000 0000 00000000 c2b06e48
+05000000 86a61036 0000 0000 00000000 630bef06
 68656c6c6f
 ```
 
@@ -179,7 +179,7 @@ Model `demo`, step size `0.01`, signals `alpha` (id 1, real/output) and `beta`
 | `50464d49` | magic | `PFMI` |
 | `0200` | wire version | 2 |
 | `3800` | header size | 56 (0x38) |
-| `ee78acea761957f0` | model id | derived, see above |
+| `d6b64a33d05b491b` | model id | derived, see above |
 | `07000000` | instance | 7 |
 | `2a00000000000000` | sequence | 42 |
 | `00002a36fe9c9717` | timestamp | 1 700 000 000 000 000 000 ns |
@@ -188,13 +188,13 @@ Model `demo`, step size `0.01`, signals `alpha` (id 1, real/output) and `beta`
 | `0000` | payload format | opaque |
 | `0000` | flags | 0 |
 | `00000000` | reserved | 0 |
-| `c2b06e48` | header CRC32 | over bytes `0..51` |
+| `630bef06` | header CRC32 | over bytes `0..51` |
 | `68656c6c6f` | payload | `hello` |
 
 Empty payload for the same model and header values (format opaque):
 
 ```
-50464d4902003800ee78acea761957f0070000002a0000000000000000002a36fe9c971700000000000000000000000000000000006fef80de
+50464d4902003800d6b64a33d05b491b070000002a0000000000000000002a36fe9c97170000000000000000000000000000000000ce540190
 ```
 
 ## Transport seam
@@ -391,7 +391,7 @@ CRC32, declared length, trailing bytes, payload CRC32.
 
 The model id is derived with a small portable SHA-256 over the documented input.
 The C++ `model_id` reproduces the Python digest for `demo`
-(`ee78acea761957f0`) and `demo_model` (`983f897eb99c8464`); this parity is
+(`d6b64a33d05b491b`) and `demo_model` (`068406171f053c51`); this parity is
 asserted in `runtime/tests/test_wire.cpp`.
 
 ### Wire mode option
@@ -438,9 +438,9 @@ the same model, encodes the equivalent payload with the Python protobuf
 runtime, and asserts the two frames are byte-identical, for example:
 
 ```text
-50464d4902003800983f897eb99c8464
+50464d49020038000d82b76145f42ca2
 070000002a0000000000000000002a36fe9c9717
 24000000a3cc6f060100000000000000
-0aebb9cb
+428ddc7e
 0a0909000000000000f83f1204220268691a021801220210042a09090000000000000000
 ```

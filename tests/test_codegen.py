@@ -109,6 +109,48 @@ def test_typed_members_use_ir_types(tmp_path):
     assert "std::int32_t m_vr4_mode = 2;" in header
 
 
+def test_parameter_lookup_is_generated_and_instance_scoped(tmp_path):
+    target = generate_model(make_model(), tmp_path / "gen")
+    header = (target / "model_runtime.hpp").read_text(encoding="utf-8")
+    source = (target / "model_runtime.cpp").read_text(encoding="utf-8")
+
+    assert "interop_parameter_string(" in header
+    assert "interop_parameter_integer(" in header
+    assert (
+        "GeneratedModelRuntime::interop_parameter_string(" in source
+    )
+    assert "parameter_key_matches(name" in source
+    # The lookup reads typed members, so two instances keep separate values.
+    assert '"enable"' in source
+    assert '"mode"' in source
+    assert "m_vr3_enable" in source
+    assert "m_vr4_mode" in source
+
+
+def test_model_id_records_exclude_parameters(tmp_path):
+    target = generate_model(make_model(), tmp_path / "gen")
+    source = (target / "model_runtime.cpp").read_text(encoding="utf-8")
+
+    records_block = source.split("ModelIdSignal>{", 1)[1].split("});", 1)[0]
+    assert "{1u, 1u}" in records_block
+    assert "{5u, 1u}" in records_block
+    assert "{3u, 3u}" not in records_block
+    assert "{4u, 2u}" not in records_block
+
+
+def test_generated_proto_and_codec_omit_parameters(tmp_path):
+    target = generate_model(make_model(), tmp_path / "gen")
+    proto = (target / "demo_model.proto").read_text(encoding="utf-8")
+    codec = (target / "model_wire.cpp").read_text(encoding="utf-8")
+
+    assert "Value enable = 3;" not in proto
+    assert "Value mode = 4;" not in proto
+    assert "Value setpoint = 5;" in proto
+    assert "payload field 3 is missing" not in codec
+    assert "payload field 4 is missing" not in codec
+    assert "payload field 5 is missing" in codec
+
+
 def test_read_and_write_enforce_direction_and_type(tmp_path):
     target = generate_model(make_model(), tmp_path / "gen")
     source = (target / "model_runtime.cpp").read_text(encoding="utf-8")

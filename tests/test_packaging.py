@@ -139,12 +139,52 @@ def test_model_description_is_valid_fmi2(tmp_path):
     assert variables["speed"].find("Real").attrib == {"unit": "m/s", "start": "1.5"}
     assert variables["setpoint"].attrib["causality"] == "input"
     assert variables["label"].find("String").attrib["start"] == "hi"
+    assert variables["enable"].attrib["causality"] == "parameter"
+    assert variables["enable"].attrib["variability"] == "fixed"
     assert variables["enable"].find("Boolean").attrib["start"] == "true"
-    assert variables["enable"].attrib["variability"] == "tunable"
+    assert variables["mode"].attrib["causality"] == "parameter"
+    assert variables["mode"].attrib["variability"] == "fixed"
     assert variables["mode"].find("Integer").attrib["start"] == "2"
+
+    experiment = root.find("DefaultExperiment")
+    assert experiment is not None
+    assert experiment.attrib["stepSize"] == "0.01"
 
     outputs = root.findall("./ModelStructure/Outputs/Unknown")
     assert [item.attrib["index"] for item in outputs] == ["1", "2"]
+
+
+def test_adapter_description_has_no_default_experiment(tmp_path):
+    adapter = replace(make_model(), realtime=False, step_size_s=None)
+    model_dir = generate_model(adapter, tmp_path / "adapter")
+    library = tmp_path / "libdemo_model.so"
+    library.write_bytes(b"\x7fELF fake adapter")
+    destination = package_fmu(
+        model_dir, library, tmp_path / "adapter.fmu", model=adapter
+    )
+
+    with ZipFile(destination) as archive:
+        root = ET.fromstring(archive.read("modelDescription.xml"))
+
+    assert root.find("DefaultExperiment") is None
+
+
+def test_packaged_parameter_block_is_fixed_and_carries_authored_starts(tmp_path):
+    _, destination = package_fixture(tmp_path)
+
+    with ZipFile(destination) as archive:
+        root = ET.fromstring(archive.read("modelDescription.xml"))
+
+    variables = {
+        variable.attrib["name"]: variable
+        for variable in root.findall("./ModelVariables/ScalarVariable")
+        if variable.attrib["causality"] == "parameter"
+    }
+    assert set(variables) == {"enable", "mode"}
+    for variable in variables.values():
+        assert variable.attrib["variability"] == "fixed"
+    assert variables["enable"].find("Boolean").attrib["start"] == "true"
+    assert variables["mode"].find("Integer").attrib["start"] == "2"
 
 
 def test_runtime_and_model_resources(tmp_path):
@@ -163,7 +203,7 @@ def test_runtime_and_model_resources(tmp_path):
     assert model["name"] == "demo_model"
 
 
-def test_transport_json_documents_the_env_contract(tmp_path):
+def test_transport_json_documents_the_parameter_contract(tmp_path):
     _, destination = package_fixture(tmp_path)
 
     with ZipFile(destination) as archive:
@@ -171,7 +211,15 @@ def test_transport_json_documents_the_env_contract(tmp_path):
 
     assert transport["default"] == "loopback"
     assert transport["schemes"] == ["loopback", "udp", "tcp"]
+    assert transport["parameter_keys"] == [
+        "transport",
+        "bind_address",
+        "peer_address",
+        "queue_depth",
+        "deadline_s",
+    ]
     assert transport["env"] == "PYFMI_INTEROP_TRANSPORT"
+    assert "no parameter interface" in transport["env_fallback"]
     assert transport["uri_examples"]
 
 

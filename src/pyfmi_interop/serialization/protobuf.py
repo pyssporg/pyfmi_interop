@@ -22,8 +22,8 @@ from .naming import (
     float_literal,
     member_name,
     message_identifier,
-    ordered_signals,
     string_literal,
+    wire_signals,
 )
 
 __all__ = [
@@ -70,10 +70,10 @@ def payload_message_name(model: ModelDefinition) -> str:
 
 
 def _projected_signals(model: ModelDefinition) -> tuple[Signal, ...]:
-    """Return signals in id order, rejecting anything the wire cannot carry."""
+    """Return wire signals in id order, rejecting what the wire cannot carry."""
 
     ordered = sorted(
-        model.signals, key=lambda item: (item.value_reference, item.name)
+        wire_signals(model), key=lambda item: (item.value_reference, item.name)
     )
     seen_ids: dict[int, str] = {}
     seen_names: set[str] = set()
@@ -245,7 +245,7 @@ def _wire_decode_signal(signal: Signal) -> str:
 
 
 def _render_model_wire(model: ModelDefinition) -> str:
-    signals = ordered_signals(model)
+    signals = wire_signals(model)
     proto_header = proto_filename(model).removesuffix(".proto") + ".pb.h"
     message = f"pyfmi_interop::wire::{payload_message_name(model)}"
     records = ", ".join(
@@ -283,7 +283,6 @@ def _render_model_wire(model: ModelDefinition) -> str:
         + "namespace {\n"
         + "\n"
         + f"constexpr char kModelName[] = {string_literal(model.name)};\n"
-        + f"constexpr double kStepSize = {float_literal(model.step_size_s)};\n"
         + "\n"
         + "template <std::size_t N>\n"
         + "std::size_t bounded_length(const std::array<char, N>& value) {\n"
@@ -297,7 +296,7 @@ def _render_model_wire(model: ModelDefinition) -> str:
         + "const std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize>& wire_model_id() {\n"
         + "    static const std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize> id =\n"
         + "        pyfmi_interop::wire::model_id(\n"
-        + "            std::string_view(kModelName), kStepSize,\n"
+        + "            std::string_view(kModelName),\n"
         + "            std::vector<pyfmi_interop::wire::ModelIdSignal>{" + records + "});\n"
         + "    return id;\n"
         + "}\n"

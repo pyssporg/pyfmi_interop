@@ -15,8 +15,10 @@ and rates; every generator reads it.
 - **Core types:** `ModelDefinition`, `Signal`, and `RateGroup` in `ir.py`.
 - **Value references:** assigned once, gap-free, in canonical signal-name order
   by `assign_value_references`.
-- **Timing:** stored in seconds as `step_size_s` and periods; every signal rate
-  and rate group must be an integer multiple of the step.
+- **Timing:** a realtime model stores `step_size_s`; every signal rate and rate
+  group must be an integer multiple of the step. An adapter has no step, so its
+  declared rates are validated as integer multiples of the slowest declared
+  rate, and no declared rate means no validation.
 - **Types:** real, integer, boolean, and string; a string signal carries a fixed
   `capacity` so its storage can be preallocated.
 - **Identity:** the GUID is a uuid5 of the model name in a fixed namespace, so

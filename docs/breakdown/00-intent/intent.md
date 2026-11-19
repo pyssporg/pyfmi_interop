@@ -15,25 +15,35 @@ Python end encodes it, a C++ end decodes it, and neither end interprets the
 model.
 
 - **The job:** take the part-definition interface — names, types, value
-  references, directions, and step metadata — and carry it across the wire in
-  one format. Nothing about what the values mean leaves the endpoint.
+  references, directions, and, for the realtime model, step metadata — and
+  carry it across the wire in one format. Nothing about what the values mean
+  leaves the endpoint.
 - **Two generated roles:** the same interface yields the realtime model and an
   adapter model that moves values on and off the byte transport. The adapter
   has no equations and no `user_step`.
 - **Causality sets the direction:** an FMI `input` is published to the wire, an
   FMI `output` is consumed from it, and a `parameter` is never published.
-- **One message per part definition:** its fields are every signal field of
-  every port, the field number is the value reference, and field order is the
-  canonical signal-name order the value references are assigned in.
+- **One message per part definition:** its fields are every input and output
+  signal field of every port, numbered `1..n` in canonical signal-name order;
+  parameters carry no wire field. FMI value references stay a separate
+  namespace owned by the generated interface, so adding a parameter never
+  renumbers the wire or moves the wire identity.
 - **Two ends:** a Python end and a C++ end meet at the byte layer and are
   tested against the same conformance vectors, so the format has one reading.
+- **The FMI layer is generated:** the C interface, the headers and the model
+  description come from the shared SysML-to-FMI generator; this repository
+  implements the model hooks and owns the wire plane. One FMI facade, not two.
 - **Two registered seams:** serialization selects one schema authority per
   backend — protobuf canonical, `packed` second — while transports select
   loopback, UDP, or TCP by name at runtime. Framing stays single-authority and
   versioned: wire version 2 adds `payload_format`, field numbers are
   append-only, and the reserved range stays reserved.
-- **Deployment stays out of the model:** transport endpoints come from the
-  environment or a manifest, never SSD/SSP content, so an SSP stays portable.
+- **Deployment is a parameter interface:** deployment-varying transport
+  configuration is authored in SysML as FMI parameters with default values, and
+  the master binds it before initialization; structural facts stay build-time
+  attributes. The environment is only a fallback when a model declares no
+  parameter interface. Endpoints are never SSD/SSP content, so an SSP stays
+  portable and one build serves many deployments.
 - **No semantics:** the repository does not step, schedule, or judge models,
   and does not translate between protocols. A model interface in equals the
   same model interface out.

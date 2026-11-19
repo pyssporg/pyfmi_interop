@@ -14,7 +14,12 @@ import math
 from ..ir import ModelDefinition, ProjectionError
 from ..roles import derive_role
 from ..wire import model_id
-from .naming import field_identifiers, message_identifier, wire_direction
+from .naming import (
+    field_identifiers,
+    message_identifier,
+    wire_direction,
+    wire_signals,
+)
 
 __all__ = [
     "SCHEMA_FORMAT_VERSION",
@@ -40,6 +45,7 @@ def render_wire_json(
 
     _check_signals(model)
     fields = field_identifiers(model)
+    signals = wire_signals(model)
     interface = model.interface or model.name
     role = model.role or derive_role(model)
     payload = {
@@ -82,10 +88,11 @@ def render_wire_json(
                 "unit": signal.unit,
                 "capacity": signal.wire_capacity,
             }
-            for signal in _ordered(model)
+            for signal in signals
         ],
-        "step_size_s": _stable_float(model.step_size_s, "step_size_s"),
     }
+    if model.step_size_s is not None:
+        payload["step_size_s"] = _stable_float(model.step_size_s, "step_size_s")
     return json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
 
 

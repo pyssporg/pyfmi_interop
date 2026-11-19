@@ -71,9 +71,10 @@ from .wire import (
     model_id,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 _LAZY_MODULES = {
+    "psysml2": ".psysml2",
     "sysml": ".sysml",
     "timing": ".timing",
 }
@@ -126,6 +127,7 @@ __all__ = [
     "native",
     "package_fmu",
     "packaging",
+    "psysml2",
     "render_proto",
     "render_wire_json",
     "resolve_role",

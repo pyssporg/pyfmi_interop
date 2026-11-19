@@ -5,7 +5,7 @@
   "guid": "c6bce198-42d9-524f-a49e-bdbba3fc7b6f",
   "interface": "demo_model",
   "model": "demo_model",
-  "model_id": "983f897eb99c8464",
+  "model_id": "0d82b76145f42ca2",
   "payload_message": "demo_model",
   "proto_package": "pyfmi_interop.wire",
   "rate_groups": [
@@ -41,28 +41,6 @@
       "rate_hz": null,
       "unit": null,
       "wire": "in"
-    },
-    {
-      "capacity": 0,
-      "data_type": "boolean",
-      "direction": "parameter",
-      "field": "enable",
-      "id": 3,
-      "name": "enable",
-      "rate_hz": null,
-      "unit": null,
-      "wire": "none"
-    },
-    {
-      "capacity": 0,
-      "data_type": "integer",
-      "direction": "parameter",
-      "field": "mode",
-      "id": 4,
-      "name": "mode",
-      "rate_hz": null,
-      "unit": null,
-      "wire": "none"
     },
     {
       "capacity": 0,

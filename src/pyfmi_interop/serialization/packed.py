@@ -28,7 +28,11 @@ from typing import Any
 from ..ir import DataType, ModelDefinition, ProjectionError, Signal, fingerprint
 from .base import Serialization, write_files
 from .descriptor import WIRE_JSON_NAME, wire_json_bytes
-from .naming import float_literal, member_name, ordered_signals, string_literal
+from .naming import (
+    member_name,
+    string_literal,
+    wire_signals,
+)
 
 __all__ = [
     "PackedSerialization",
@@ -97,7 +101,7 @@ def encode(
     mapping: Mapping[Any, Any] = {} if values is None else values
     return b"".join(
         _encode_signal(signal, _lookup(mapping, signal))
-        for signal in ordered_signals(model)
+        for signal in wire_signals(model)
     )
 
 
@@ -107,7 +111,7 @@ def decode(model: ModelDefinition, payload: bytes) -> dict[str, Any]:
     view = memoryview(payload)
     offset = 0
     result: dict[str, Any] = {}
-    for signal in ordered_signals(model):
+    for signal in wire_signals(model):
         try:
             if signal.data_type is DataType.REAL:
                 value = _DOUBLE.unpack_from(view, offset)[0]
@@ -176,7 +180,7 @@ def describe(model: ModelDefinition) -> str:
     """Human-readable one-line layout summary (used by docs/tests)."""
 
     parts = []
-    for signal in ordered_signals(model):
+    for signal in wire_signals(model):
         if signal.data_type is DataType.REAL:
             parts.append(f"{signal.value_reference}:real=float64")
         elif signal.data_type is DataType.INTEGER:
@@ -260,7 +264,7 @@ def _decode_statement(signal: Signal) -> str:
 
 
 def _render_model_wire(model: ModelDefinition) -> str:
-    signals = ordered_signals(model)
+    signals = wire_signals(model)
     records = ", ".join(
         f"{{{signal.value_reference}u, {signal.data_type.number}u}}"
         for signal in signals
@@ -294,7 +298,6 @@ def _render_model_wire(model: ModelDefinition) -> str:
         + "namespace {\n"
         + "\n"
         + f"constexpr char kModelName[] = {string_literal(model.name)};\n"
-        + f"constexpr double kStepSize = {float_literal(model.step_size_s)};\n"
         + "\n"
         + "template <std::size_t N>\n"
         + "std::size_t bounded_length(const std::array<char, N>& value) {\n"
@@ -380,7 +383,7 @@ def _render_model_wire(model: ModelDefinition) -> str:
         + "const std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize>& wire_model_id() {\n"
         + "    static const std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize> id =\n"
         + "        pyfmi_interop::wire::model_id(\n"
-        + "            std::string_view(kModelName), kStepSize,\n"
+        + "            std::string_view(kModelName),\n"
         + "            std::vector<pyfmi_interop::wire::ModelIdSignal>{" + records + "});\n"
         + "    return id;\n"
         + "}\n"

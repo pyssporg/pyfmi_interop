@@ -53,7 +53,7 @@ bool equals(const std::optional<std::vector<std::byte>>& frame,
 }
 
 std::vector<std::uint8_t> sample_frame() {
-    const auto model_id = pyfmi_interop::wire::model_id("transport-test", 0.01, {});
+    const auto model_id = pyfmi_interop::wire::model_id("transport-test", {});
     const auto encoded = pyfmi_interop::wire::encode_frame(
         model_id, "hello", 1, 1, 0, pyfmi_interop::wire::PayloadFormat::Opaque);
     return encoded.frame;

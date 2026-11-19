@@ -46,9 +46,12 @@ CoSimulation FMU.
 
 ## Hard constraints
 
-- **One IR.** `src/pyfmi_interop/ir.py` is the only signal and rate model.
-  Every generator — including the adapter generator — plus the builder and the
-  packager read it; none re-derives value references or timing.
+- **One variable set, two namespaces.** The generated FMI interface owns the
+  FMI value references — zero-based, declaration order, parameters included.
+  `src/pyfmi_interop/ir.py` is the wire and rate projection over the same
+  signals: wire field numbers `1..n`, parameters excluded, canonical name
+  order. Every wire generator, the builder and the packager read the IR; none
+  re-derives wire numbering.
 - **One wire contract, one framing authority.** `src/pyfmi_interop/wire/` and
   `runtime/src/wire.cpp` are the only framing implementations. Each
   serialization backend has exactly one schema emitter: `schema.py` for the
@@ -68,8 +71,10 @@ CoSimulation FMU.
   from the model name; timestamps and zip order are fixed by packaging.
 - **Do not edit generated files by hand.** Change the IR, the generator, or the
   template, then regenerate. A hand edit is overwritten and hides the real
-  source of the change. The one exception is `model_impl.hpp`, the designated
-  `user_step` hook where model equations belong.
+  source of the change. The one exception is the model hook file —
+  `model_impl.hpp` for the interop-owned facade, `<stem>_model.cpp` for the
+  generated FMI layer — which is write-if-absent and is where model behaviour
+  belongs.
 - **No model equations, no master algorithm.** SysML defines the interface, not
   the equations; `user_step` is the only place model behaviour is written, and
   the runtime is a slave, not a co-simulation master. The adapter model carries

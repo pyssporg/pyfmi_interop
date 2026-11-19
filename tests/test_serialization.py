@@ -21,8 +21,11 @@ def _model() -> ir.ModelDefinition:
         signals=(
             ir.Signal("alpha", 1, ir.DataType.REAL, ir.Direction.OUTPUT),
             ir.Signal("beta", 2, ir.DataType.INTEGER, ir.Direction.INPUT),
-            ir.Signal("flag", 3, ir.DataType.BOOLEAN, ir.Direction.PARAMETER),
+            ir.Signal("flag", 3, ir.DataType.BOOLEAN, ir.Direction.OUTPUT),
             ir.Signal("label", 4, ir.DataType.STRING, ir.Direction.OUTPUT, capacity=8),
+            ir.Signal(
+                "gain", 5, ir.DataType.REAL, ir.Direction.PARAMETER, initial=2.0
+            ),
         ),
     )
 
@@ -111,6 +114,41 @@ def test_packed_uses_initial_values_for_missing_fields():
         "flag": False,
         "label": "",
     }
+
+
+def test_parameters_are_not_packed_fields():
+    model = _model()
+    payload = packed.encode(model, {"gain": 99.0, "alpha": 1.0})
+
+    decoded = packed.decode(model, payload)
+    assert "gain" not in decoded
+    # alpha <d>, beta <i, flag <B, label <I length: the parameter adds nothing.
+    assert len(payload) == struct.calcsize("<d") + struct.calcsize("<i") + 1 + 4
+
+
+def test_model_id_ignores_parameter_defaults():
+    model = _model()
+    edited = ir.ModelDefinition(
+        name=model.name,
+        guid=model.guid,
+        step_size_s=model.step_size_s,
+        signals=tuple(
+            ir.Signal(
+                name=signal.name,
+                value_reference=signal.value_reference,
+                data_type=signal.data_type,
+                direction=signal.direction,
+                rate_hz=signal.rate_hz,
+                unit=signal.unit,
+                initial=99.0 if signal.name == "gain" else signal.initial,
+                capacity=signal.capacity,
+            )
+            for signal in model.signals
+        ),
+    )
+
+    assert wire.model_id(edited) == wire.model_id(model)
+    assert packed.encode(edited) == packed.encode(model)
 
 
 def test_packed_rejects_a_truncated_payload():

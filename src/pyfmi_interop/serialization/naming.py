@@ -26,6 +26,7 @@ __all__ = [
     "string_literal",
     "value_expression",
     "wire_direction",
+    "wire_signals",
 ]
 
 _NON_IDENTIFIER = re.compile(r"[^0-9A-Za-z_]")
@@ -65,9 +66,7 @@ def field_identifiers(model: ModelDefinition) -> dict[str, str]:
 
     mapping: dict[str, str] = {}
     claimed: dict[str, str] = {}
-    for signal in sorted(
-        model.signals, key=lambda item: (item.value_reference, item.name)
-    ):
+    for signal in wire_signals(model):
         field = identifier(signal.name)
         other = claimed.get(field)
         if other is not None and other != signal.name:
@@ -103,10 +102,31 @@ def wire_direction(signal: Signal) -> str:
 
 
 def ordered_signals(model: ModelDefinition) -> tuple[Signal, ...]:
-    """Signals in value-reference order, the canonical wire field order."""
+    """All signals in value-reference order (parameters included)."""
 
     return tuple(
         sorted(model.signals, key=lambda item: item.value_reference)
+    )
+
+
+def wire_signals(model: ModelDefinition) -> tuple[Signal, ...]:
+    """Signals that travel on the wire, in value-reference order.
+
+    Parameters are deployment configuration: they are FMI variables but never
+    payload fields, so the descriptor, both codecs, and the model id exclude
+    them.  Value references are not reassigned; each remaining field keeps the
+    value reference it was authored with.
+    """
+
+    return tuple(
+        sorted(
+            (
+                signal
+                for signal in model.signals
+                if signal.direction is not Direction.PARAMETER
+            ),
+            key=lambda item: item.value_reference,
+        )
     )
 
 

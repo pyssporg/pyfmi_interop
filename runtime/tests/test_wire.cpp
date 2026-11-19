@@ -57,20 +57,20 @@ ErrorCode decode_error(const std::vector<std::uint8_t>& bytes) {
 
 std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize> demo_model_id() {
     return pyfmi_interop::wire::model_id(
-        "demo", 0.01, std::vector<ModelIdSignal>{{1, 1}, {2, 2}});
+        "demo", std::vector<ModelIdSignal>{{1, 1}, {2, 2}});
 }
 
-const std::string kModelIdHex = "ee78acea761957f0";
+const std::string kModelIdHex = "d6b64a33d05b491b";
 const std::string kEmptyFrameHex =
-    "50464d4902003800ee78acea761957f0"
+    "50464d4902003800d6b64a33d05b491b"
     "070000002a0000000000000000002a36fe9c9717"
     "00000000000000000000000000000000"
-    "6fef80de";
+    "ce540190";
 const std::string kHelloFrameHex =
-    "50464d4902003800ee78acea761957f0"
+    "50464d4902003800d6b64a33d05b491b"
     "070000002a0000000000000000002a36fe9c9717"
     "0500000086a610360000000000000000"
-    "c2b06e48"
+    "630bef06"
     "68656c6c6f";
 
 std::string range_256() {
@@ -85,10 +85,10 @@ std::string range_256() {
 }
 
 const std::string kBoundaryFrameHex =
-    "50464d4902003800ee78acea761957f0"
+    "50464d4902003800d6b64a33d05b491b"
     "070000002a0000000000000000002a36fe9c9717"
     "00010000738c05290000000000000000"
-    "673f2f81" + range_256();
+    "c684aecf" + range_256();
 
 pyfmi_interop::wire::EncodeResult encode_demo(const std::string& payload,
                                               PayloadFormat format = PayloadFormat::Opaque) {
@@ -104,16 +104,16 @@ int main() {
         return fail("crc32 check value");
     }
 
-    // Model-id derivation is unchanged from v1 (the domain separator stays v1).
+    // Model-id derivation is v2: the interface only, no timing.
     const auto demo_id = demo_model_id();
     if (to_hex(std::vector<std::uint8_t>(demo_id.begin(), demo_id.end())) != kModelIdHex) {
         return fail("model id demo");
     }
     const auto second = pyfmi_interop::wire::model_id(
-        "demo_model", 0.01,
+        "demo_model",
         std::vector<ModelIdSignal>{{5, 1}, {2, 4}, {1, 1}, {4, 2}, {3, 3}});
     if (to_hex(std::vector<std::uint8_t>(second.begin(), second.end())) !=
-        "983f897eb99c8464") {
+        "068406171f053c51") {
         return fail("model id demo_model");
     }
 

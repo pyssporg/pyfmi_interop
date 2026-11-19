@@ -20,7 +20,7 @@ from pyfmi_interop.ir import (
     deterministic_guid,
 )
 from pyfmi_interop.schema import payload_message_name, proto_filename
-from pyfmi_interop.serialization.naming import field_identifiers
+from pyfmi_interop.serialization.naming import field_identifiers, wire_signals
 
 pytestmark = [pytest.mark.cpp, pytest.mark.contract]
 
@@ -68,7 +68,7 @@ def _python_payload(model: ModelDefinition, descriptor_path: Path) -> bytes:
     fields = field_identifiers(model)
 
     for signal in sorted(
-        model.signals, key=lambda item: (item.value_reference, item.name)
+        wire_signals(model), key=lambda item: (item.value_reference, item.name)
     ):
         value = getattr(message, fields[signal.name])
         if signal.data_type is DataType.REAL:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -64,8 +65,19 @@ def package_fmu(
     out_path: str | Path,
     *,
     model: ModelDefinition | None = None,
+    model_description: str | bytes | None = None,
+    model_json: bytes | None = None,
+    model_name: str | None = None,
+    extra_entries: Mapping[str, bytes] | None = None,
+    include_schema: bool = True,
 ) -> Path:
-    """Write ``out_path`` from a generated model directory and shared library."""
+    """Write ``out_path`` from a generated model directory and shared library.
+
+    ``model_description``, ``model_json`` and ``extra_entries`` let the ``psysml2``
+    FMI layer inject the document and schemas another generator owns while
+    this packager still fixes the archive layout, timestamps and order.  The
+    legacy facade leaves all three unset and keeps the historical archive.
+    """
 
     destination = Path(out_path)
     binary = Path(library)
@@ -82,24 +94,40 @@ def package_fmu(
 
     serialization = model.serialization or "protobuf"
     backend = get_serialization(serialization)
+    if model_description is None:
+        description = render_model_description(model).encode("utf-8")
+    elif isinstance(model_description, str):
+        description = model_description.encode("utf-8")
+    else:
+        description = model_description
     entries: dict[str, bytes] = {
-        "modelDescription.xml": render_model_description(model).encode("utf-8"),
-        "resources/model.json": _canonical_model_json(model),
+        "modelDescription.xml": description,
+        "resources/model.json": (
+            _canonical_model_json(model) if model_json is None else model_json
+        ),
         "resources/runtime.json": _runtime_json(
-            model, binary_arcname, platform_dir, serialization
+            model,
+            binary_arcname,
+            platform_dir,
+            serialization,
+            model_name=model_name,
         ),
         "resources/transport.json": _transport_json(),
         binary_arcname: binary.read_bytes(),
     }
     # Only the selected backend's artifacts travel with the binary: a packed or
     # opaque FMU never carries a protobuf schema it did not emit.
-    entries.update(
-        schema_entries(
-            model,
-            prefix=f"binaries/{platform_dir}",
-            serialization=backend.name,
+    if include_schema:
+        entries.update(
+            schema_entries(
+                model,
+                prefix=f"binaries/{platform_dir}",
+                serialization=backend.name,
+            )
         )
-    )
+    if extra_entries is not None:
+        for name, data in extra_entries.items():
+            entries[name] = data
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(
@@ -132,9 +160,11 @@ def _runtime_json(
     binary_arcname: str,
     platform_dir: str,
     serialization: str,
+    *,
+    model_name: str | None = None,
 ) -> bytes:
     payload = {
-        "modelName": model.name,
+        "modelName": model_name or model.name,
         "modelIdentifier": model.name,
         "guid": model.guid,
         "fingerprint": fingerprint(model),
@@ -149,12 +179,20 @@ def _runtime_json(
 
 
 def _transport_json() -> bytes:
-    """Consumer documentation for the transport the runtime reads from env."""
+    """Consumer documentation for the parameter-first transport contract."""
 
     payload = {
         "default": "loopback",
         "schemes": ["loopback", "udp", "tcp"],
+        "parameter_keys": [
+            "transport",
+            "bind_address",
+            "peer_address",
+            "queue_depth",
+            "deadline_s",
+        ],
         "env": "PYFMI_INTEROP_TRANSPORT",
+        "env_fallback": "only when the model declares no parameter interface",
         "uri_examples": [
             "loopback",
             "udp://239.0.0.1:5000",
@@ -199,11 +237,12 @@ def render_model_description(model: ModelDefinition) -> str:
             "providesDirectionalDerivative": "false",
         },
     )
-    SubElement(
-        root,
-        "DefaultExperiment",
-        {"startTime": "0", "stepSize": _format_real(model.step_size_s)},
-    )
+    if model.realtime:
+        SubElement(
+            root,
+            "DefaultExperiment",
+            {"startTime": "0", "stepSize": _format_real(model.step_size_s)},
+        )
 
     model_variables = SubElement(root, "ModelVariables")
     outputs: list[int] = []
@@ -242,7 +281,7 @@ def render_model_description(model: ModelDefinition) -> str:
 
 def _variability(signal: Signal) -> str:
     if signal.direction is Direction.PARAMETER:
-        return "tunable"
+        return "fixed"
     if signal.data_type is DataType.REAL:
         return "continuous"
     return "discrete"

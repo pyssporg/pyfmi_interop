@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
 
-from ..ir import ModelDefinition
+from ..ir import Direction, ModelDefinition
 from .errors import (
     FieldRangeError,
     HeaderChecksumError,
@@ -83,7 +83,7 @@ assert HEADER_SIZE == 56
 assert HEADER_CRC_OFFSET == 52
 
 #: Domain separator for :func:`model_id`; changing it changes every id.
-_MODEL_ID_DOMAIN = b"pyfmi_interop.model-id.v1\x00"
+_MODEL_ID_DOMAIN = b"pyfmi_interop.model-id.v2\x00"
 
 _SUPPORTED_FORMATS = frozenset(int(member) for member in PayloadFormat)
 
@@ -125,14 +125,19 @@ class DecodedFrame:
 def model_id(model: ModelDefinition) -> bytes:
     """Derive the 8-byte interface identity of ``model``.
 
-    The derivation is unchanged from wire version 1 so existing identities stay
-    stable.  The digest input is, in order:
+    The identity is the wire interface and nothing else: the model name plus
+    the ordered ``(wire field, data type)`` records.  Timing, direction, units,
+    rates, capacities, and initial values never enter it, so an adapter's step
+    size cannot move its identity.
 
-    * the domain separator ``b"pyfmi_interop.model-id.v1\\x00"``;
+    The digest input is, in order:
+
+    * the domain separator ``b"pyfmi_interop.model-id.v2\\x00"``;
     * ``model.name`` encoded as UTF-8 followed by one NUL byte;
-    * ``model.step_size_s`` as an IEEE 754 double, little-endian (``<d``);
-    * one ``<IB`` record per signal, ordered by ``(value_reference, name)``:
-      the value reference as uint32 followed by ``DataType.number`` as uint8.
+    * one ``<IB`` record per **wire** signal, ordered by
+      ``(value_reference, name)``: the value reference as uint32 followed by
+      ``DataType.number`` as uint8.  Parameters are deployment configuration,
+      never payload fields, so they do not contribute to the identity.
 
     The result is the first 8 bytes of the SHA-256 digest.
     """
@@ -141,9 +146,13 @@ def model_id(model: ModelDefinition) -> bytes:
     digest.update(_MODEL_ID_DOMAIN)
     digest.update(model.name.encode("utf-8"))
     digest.update(b"\x00")
-    digest.update(struct.pack("<d", model.step_size_s))
     for signal in sorted(
-        model.signals, key=lambda item: (item.value_reference, item.name)
+        (
+            item
+            for item in model.signals
+            if item.direction is not Direction.PARAMETER
+        ),
+        key=lambda item: (item.value_reference, item.name),
     ):
         digest.update(
             struct.pack("<IB", signal.value_reference, signal.data_type.number)

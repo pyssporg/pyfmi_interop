@@ -20,6 +20,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import replace
 from pathlib import Path
 
@@ -146,6 +147,8 @@ _RUNNER = textwrap.dedent(
         unsigned steps = 0;
         unsigned steps2 = 0;
         double step_size = 0.001;
+        bool ready_after_exit = false;
+        std::string guid = fmi2TypesPlatform;
         std::string ready_file;
         std::string await_before;
         std::string phase1_file;
@@ -173,6 +176,10 @@ _RUNNER = textwrap.dedent(
                 step_size = std::strtod(next("--step-size"), nullptr);
             } else if (arg == "--ready-file") {
                 ready_file = next("--ready-file");
+            } else if (arg == "--guid") {
+                guid = next("--guid");
+            } else if (arg == "--ready-after-exit") {
+                ready_after_exit = true;
             } else if (arg == "--await-before") {
                 await_before = next("--await-before");
             } else if (arg == "--phase1-file") {
@@ -230,19 +237,22 @@ _RUNNER = textwrap.dedent(
         callbacks.stepFinished = nullptr;
 
         fmi2Component component = fmi2Instantiate(
-            "runner", fmi2CoSimulation, fmi2TypesPlatform, "file:///tmp",
+            "runner", fmi2CoSimulation, guid.c_str(), "file:///tmp",
             &callbacks, fmi2False, fmi2True);
         if (component == nullptr) {
             fail("fmi2Instantiate failed");
-        }
-        if (!ready_file.empty()) {
-            std::ofstream(ready_file) << "ready\n";
         }
 
         expect(fmi2SetupExperiment(component, fmi2False, 0.0, 0.0, fmi2False, 0.0),
                "fmi2SetupExperiment");
         expect(fmi2EnterInitializationMode(component), "fmi2EnterInitializationMode");
-        if (!await_before.empty()) {
+        // The legacy facade opens the transport in fmi2EnterInitializationMode;
+        // the psysml2 FMI layer opens it from the initialize hook, which runs
+        // in fmi2ExitInitializationMode.  The marker moves with it.
+        if (!ready_after_exit && !ready_file.empty()) {
+            std::ofstream(ready_file) << "ready\n";
+        }
+        if (!ready_after_exit && !await_before.empty()) {
             wait_for(await_before);
         }
         for (const RealArg& item : set_real) {
@@ -258,6 +268,12 @@ _RUNNER = textwrap.dedent(
             expect(fmi2SetBoolean(component, &vr, 1, &item.value), "fmi2SetBoolean");
         }
         expect(fmi2ExitInitializationMode(component), "fmi2ExitInitializationMode");
+        if (ready_after_exit && !ready_file.empty()) {
+            std::ofstream(ready_file) << "ready\n";
+        }
+        if (ready_after_exit && !await_before.empty()) {
+            wait_for(await_before);
+        }
 
         double time_s = 0.0;
         auto run = [&](unsigned count) {
@@ -613,3 +629,138 @@ def test_part_definition_udp_exchange_protobuf(source_model, tmp_path):
     """The same exchange with the canonical protobuf payload backend."""
 
     _run_exchange(source_model, tmp_path, "protobuf")
+
+
+def _build_psysml2(model, source: Path, directory: Path, role: str, serialization: str) -> Path:
+    target = generate_model(
+        model,
+        directory,
+        serialization=serialization,
+        role=role,
+        fmi_layer="psysml2",
+        sysml_source=source,
+    )
+    return build_model(target, directory / "build")
+
+
+def _run_psysml2_exchange(tmp_path: Path, serialization: str) -> None:
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    from pyfmi_interop import sysml
+
+    source = tmp_path / "exchange.sysml"
+    source.write_text(_FIXTURE, encoding="utf-8")
+    model = sysml.load_model(source, name="ExchangeModel")
+
+    receiver_dir = tmp_path / f"psysml2_receiver_{serialization}"
+    sender_dir = tmp_path / f"psysml2_sender_{serialization}"
+    receiver_library = _build_psysml2(
+        model, source, receiver_dir, "receiver", serialization
+    )
+    sender_library = _build_psysml2(model, source, sender_dir, "sender", serialization)
+    receiver_runner = _compile_runner(receiver_dir, receiver_library)
+    sender_runner = _compile_runner(sender_dir, sender_library)
+    description = next(receiver_dir.glob("*/modelDescription.xml"))
+    guid = ET.parse(description).getroot().attrib["guid"]
+
+    sender_wire = json.loads((sender_dir / "wire.json").read_text(encoding="utf-8"))
+    receiver_wire = json.loads(
+        (receiver_dir / "wire.json").read_text(encoding="utf-8")
+    )
+    assert sender_wire["model_id"] == receiver_wire["model_id"]
+
+    by_name = {
+        item["name"]: item
+        for item in json.loads(
+            (receiver_dir / "model.json").read_text(encoding="utf-8")
+        )["signals"]
+    }
+    demand = by_name["command.demand"]
+    mode = by_name["command.mode"]
+    enabled = by_name["command.enabled"]
+
+    port = _free_udp_port()
+    base_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"PYFMI_INTEROP_TRANSPORT", "PYFMI_INTEROP_TRANSPORT_ENDPOINT"}
+    }
+
+    ready = tmp_path / "psysml2_ready"
+    sender_done = tmp_path / "psysml2_sender_done"
+
+    receiver_env = dict(base_env)
+    receiver_env["PYFMI_INTEROP_TRANSPORT"] = f"udp://127.0.0.1:{port}"
+    receiver_process = _start(
+        [
+            str(receiver_runner),
+            "--guid",
+            guid,
+            "--ready-after-exit",
+            "--ready-file",
+            str(ready),
+            "--await-before",
+            str(sender_done),
+            "--steps",
+            "1",
+            "--get-real",
+            str(demand["value_reference"]),
+            "--get-int",
+            str(mode["value_reference"]),
+            "--get-bool",
+            str(enabled["value_reference"]),
+        ],
+        receiver_env,
+    )
+
+    try:
+        _wait_for(ready, receiver_process)
+        sender_env = dict(base_env)
+        sender_env["PYFMI_INTEROP_TRANSPORT"] = (
+            f"udp://127.0.0.1:0?peer=127.0.0.1:{port}"
+        )
+        sender_process = _start(
+            [
+                str(sender_runner),
+                "--guid",
+                guid,
+                "--steps",
+                "20",
+                "--set-real",
+                f"{demand['value_reference']}=12.5",
+                "--set-int",
+                f"{mode['value_reference']}=7",
+                "--set-bool",
+                f"{enabled['value_reference']}=1",
+            ],
+            sender_env,
+        )
+        sender_out, sender_err = sender_process.communicate(timeout=30)
+        assert sender_process.returncode == 0, sender_out + sender_err
+        sender_done.write_text("done\n", encoding="utf-8")
+        receiver_out, receiver_err = receiver_process.communicate(timeout=30)
+        assert receiver_process.returncode == 0, receiver_out + receiver_err
+    finally:
+        if receiver_process.poll() is None:
+            receiver_process.kill()
+            receiver_process.communicate()
+
+    phases = _parse(receiver_out)
+    first = phases["P1"]
+    assert first[("real", demand["value_reference"])] == 12.5, (
+        receiver_out,
+        receiver_err,
+    )
+    assert first[("integer", mode["value_reference"])] == 7
+    assert first[("boolean", enabled["value_reference"])] is True
+
+
+@pytest.mark.skipif(_SKIP is not None, reason=_SKIP or "")
+@pytest.mark.skipif(_PROTOC is None, reason="protoc is not available")
+def test_psysml2_udp_exchange_protobuf(tmp_path):
+    _run_psysml2_exchange(tmp_path, "protobuf")
+
+
+@pytest.mark.skipif(_SKIP is not None, reason=_SKIP or "")
+def test_psysml2_udp_exchange_packed(tmp_path):
+    _run_psysml2_exchange(tmp_path, "packed")

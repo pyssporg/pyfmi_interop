@@ -25,6 +25,7 @@ from pyfmi_interop import (
     model_from_dict,
     package_fmu,
 )
+from pyfmi_interop.packaging import platform_binary_dir
 from pyfmi_interop.roles import ROLES
 from pyfmi_interop.sysml import load_model
 
@@ -66,6 +67,15 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="Narrow the role derived from FMI causality.",
     )
+    parser.add_argument(
+        "--fmi-layer",
+        choices=("psysml2", "interop"),
+        default="psysml2",
+        help=(
+            "Who owns the FMI 2.0 interface (default: psysml2, which delegates "
+            "it to pyfmi_sysml2)."
+        ),
+    )
     return parser
 
 
@@ -76,11 +86,12 @@ def main(argv: list[str] | None = None) -> int:
     build_dir = out_root / "build"
 
     # 1. SysML interface -> IR.  The part definition's ports become signals.
+    #    An adapter has no step of its own; the master owns the cadence.
     model = load_model(
         args.sysml,
         name=args.name,
         step_size_s=args.step_size,
-        realtime=True,
+        realtime=False,
     )
 
     # 2. IR -> C++ adapter sources, wire schema and model.json.
@@ -89,37 +100,85 @@ def main(argv: list[str] | None = None) -> int:
         model_dir,
         serialization=args.serialization,
         role=args.role,
+        fmi_layer=args.fmi_layer,
+        sysml_source=args.sysml,
     )
 
     # 3. C++ sources -> shared library (links runtime and transport archives).
     library = build_model(model_dir, build_dir=build_dir)
 
-    # 4. Generated model.json carries the resolved role and serialization.
-    effective = model_from_dict(
-        json.loads((model_dir / "model.json").read_text(encoding="utf-8"))
-    )
-    fmu_path = out_root / f"{effective.name}.fmu"
-    package_fmu(model_dir, library, fmu_path, model=effective)
+    fmu_path = out_root / f"{_fmu_name(model_dir)}.fmu"
+    if args.fmi_layer == "psysml2":
+        from pyfmi_interop.psysml2 import (
+            load_adapter_model,
+            wire_model_from_adapter_json,
+        )
+
+        payload = load_adapter_model(model_dir)
+        effective = wire_model_from_adapter_json(payload)
+        platform = platform_binary_dir()
+        extra = {
+            f"binaries/{platform}/wire.json": (model_dir / "wire.json").read_bytes()
+        }
+        proto = model_dir / f"{effective.name}.proto"
+        if proto.is_file():
+            extra[f"binaries/{platform}/{proto.name}"] = proto.read_bytes()
+        package_fmu(
+            model_dir,
+            library,
+            fmu_path,
+            model=effective,
+            model_description=(
+                model_dir / effective.interface / "modelDescription.xml"
+            ).read_text(encoding="utf-8"),
+            model_json=(model_dir / "model.json").read_bytes(),
+            model_name=payload["model_name"],
+            extra_entries=extra,
+            include_schema=False,
+        )
+    else:
+        effective = model_from_dict(
+            json.loads((model_dir / "model.json").read_text(encoding="utf-8"))
+        )
+        package_fmu(model_dir, library, fmu_path, model=effective)
 
     _print_summary(model_dir, fmu_path)
     return 0
 
 
+def _fmu_name(model_dir: Path) -> str:
+    payload = json.loads((model_dir / "model.json").read_text(encoding="utf-8"))
+    return str(payload["name"])
+
+
 def _print_summary(model_dir: Path, fmu_path: Path) -> None:
     wire = json.loads((model_dir / "wire.json").read_text(encoding="utf-8"))
+    model = json.loads((model_dir / "model.json").read_text(encoding="utf-8"))
     print(f"role: {wire['role']}")
     print(
         f"payload: {wire['payload_message']} "
         f"(format={wire['format']}, format_id={wire['format_id']})"
     )
-    print(f"step_size_s: {wire['step_size_s']}")
-    print(f"{'field':<24} {'vr':>3} {'causality':<9} wire")
+    print(f"step_size_s: {wire.get('step_size_s')}")
+    print(f"{'signal':<24} {'vr':>4} {'field':>5} {'causality':<9} wire")
     for signal in wire["signals"]:
+        vr = signal.get("value_reference", signal.get("id"))
+        field = signal.get("field")
         print(
-            f"{signal['field']:<24} {signal['id']:>3} "
+            f"{signal['name']:<24} {vr:>4} {str(field):>5} "
             f"{signal['direction']:<9} {signal['wire']}"
         )
-    print("transport URIs:")
+    parameters = [
+        signal for signal in model["signals"] if signal["direction"] == "parameter"
+    ]
+    if parameters:
+        print("deployment parameters (set before fmi2EnterInitializationMode):")
+        for signal in parameters:
+            print(
+                f"  {signal['name']:<20} vr={signal['value_reference']:<3} "
+                f"{signal['data_type']:<8} start={signal['initial']!r}"
+            )
+    print("transport URIs come from the parameters, for example:")
     print("  loopback")
     print("  udp://127.0.0.1:5000?peer=127.0.0.1:5001")
     print("  tcp://127.0.0.1:5001?peer=127.0.0.1:5000")

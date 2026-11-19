@@ -13,31 +13,31 @@ pytestmark = pytest.mark.unit
 
 _PREFIX = struct.Struct("<4sHH8sIQQIIHHI")
 
-#: model name "demo", step size 0.01, signals alpha(1, real/out), beta(2, integer/in).
-MODEL_ID_HEX = "ee78acea761957f0"
+#: model name "demo", signals alpha(1, real/out), beta(2, integer/in).
+MODEL_ID_HEX = "d6b64a33d05b491b"
 
 # Empty payload, opaque format (0), instance 7, sequence 42,
 # timestamp 1_700_000_000_000_000_000 ns.
 EMPTY_FRAME_HEX = (
-    "50464d4902003800ee78acea761957f0"
+    "50464d4902003800d6b64a33d05b491b"
     "070000002a0000000000000000002a36fe9c9717"
     "00000000000000000000000000000000"
-    "6fef80de"
+    "ce540190"
 )
 # Same header, payload b"hello".
 HELLO_FRAME_HEX = (
-    "50464d4902003800ee78acea761957f0"
+    "50464d4902003800d6b64a33d05b491b"
     "070000002a0000000000000000002a36fe9c9717"
     "0500000086a610360000000000000000"
-    "c2b06e48"
+    "630bef06"
     "68656c6c6f"
 )
 # Same header, payload bytes(range(256)): the uint8 length boundary.
 BOUNDARY_FRAME_HEX = (
-    "50464d4902003800ee78acea761957f0"
+    "50464d4902003800d6b64a33d05b491b"
     "070000002a0000000000000000002a36fe9c9717"
     "00010000738c05290000000000000000"
-    "673f2f81"
+    "c684aecf"
 ) + bytes(range(256)).hex()
 
 
@@ -126,7 +126,7 @@ def test_model_id_is_stable() -> None:
     assert wire.model_id(_model()).hex() == MODEL_ID_HEX
 
 
-def test_model_id_changes_with_the_interface() -> None:
+def test_model_id_ignores_step_size_but_changes_with_the_interface() -> None:
     base = wire.model_id(_model())
     stepped = ir.ModelDefinition(
         name="demo",
@@ -134,13 +134,23 @@ def test_model_id_changes_with_the_interface() -> None:
         step_size_s=0.02,
         signals=_model().signals,
     )
+    rated = ir.ModelDefinition(
+        name="demo",
+        guid=ir.deterministic_guid("demo"),
+        step_size_s=0.01,
+        signals=(
+            ir.Signal("alpha", 1, ir.DataType.REAL, ir.Direction.OUTPUT, rate_hz=10.0),
+            _model().signals[1],
+        ),
+    )
     retyped = ir.ModelDefinition(
         name="demo",
         guid=ir.deterministic_guid("demo"),
         step_size_s=0.01,
         signals=(_model().signals[0],),
     )
-    assert wire.model_id(stepped) != base
+    assert wire.model_id(stepped) == base
+    assert wire.model_id(rated) == base
     assert wire.model_id(retyped) != base
 
 

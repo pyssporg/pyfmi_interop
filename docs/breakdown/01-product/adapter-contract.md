@@ -3,7 +3,7 @@ id: CP-003
 type: capability
 title: Byte transport contract
 summary: The repository defines the wire frame and one Transport interface; the loopback backend is always built, and no protocol binding ships.
-date: 2026-11-09
+date: 2026-11-19
 status: current
 ---
 
@@ -19,5 +19,10 @@ A transport carries wire frames; it does not interpret the model interface.
   needed for single-process tests.
 - **Byte transports:** `udp`, `tcp`, and `unix` name the byte carriers in the
   CLI boundary; framing is the only contract this repository defines for them.
-- **Failure:** an unknown or unavailable transport is reported; there is no
-  silent fallback to loopback or another backend.
+- **Deployment:** a transport endpoint is resolved per instance from the
+  model's `parameter` interface (`transport`, `bind_address`, `peer_address`,
+  `queue_depth`, `deadline_s`) before initialization. The process environment
+  is consulted only when the model declares no parameter interface at all.
+- **Failure:** an unknown transport name or parameter value is reported and
+  makes initialization fail; there is no silent fallback to loopback or
+  another backend.

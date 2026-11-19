@@ -34,6 +34,7 @@ from ..serialization.naming import (
     ordered_signals,
     string_literal,
     value_expression,
+    wire_signals,
 )
 from .cmake import render_cmake
 
@@ -48,12 +49,42 @@ def generate_model(
     *,
     serialization: str = "protobuf",
     role: str | None = None,
+    fmi_layer: str = "interop",
+    sysml_source: object | None = None,
+    composition: str | None = None,
+    component: str | None = None,
+    prefix: str | None = None,
 ) -> Path:
     """Write the complete C++ source tree for ``model`` into ``out_dir``.
 
     ``serialization`` selects the payload backend.  ``role`` may narrow the
     role derived from FMI causality; widening it raises :class:`ValueError`.
+
+    ``fmi_layer`` selects who owns the FMI 2.0 C interface.  The default
+    ``"interop"`` keeps this repository's facade.  ``"psysml2"`` delegates the
+    FMI interface, headers and ``modelDescription.xml`` to ``pyfmi_sysml2``
+    and supplies the model hooks here; it needs ``sysml_source=`` (a SysML path
+    or an already loaded ``Architecture``) and cannot be used for a JSON
+    ``model.json`` input that has no architecture behind it.
     """
+
+    if fmi_layer == "psysml2":
+        from ..psysml2 import generate_adapter_model
+
+        return generate_adapter_model(
+            model,
+            out_dir,
+            source=sysml_source,
+            serialization=serialization,
+            role=role,
+            composition=composition,
+            component=component,
+            prefix=prefix,
+        )
+    if fmi_layer != "interop":
+        raise ValueError(
+            f"unknown fmi_layer {fmi_layer!r}; expected 'interop' or 'psysml2'"
+        )
 
     model.validate()
     _check_types(model)
@@ -145,6 +176,17 @@ def _render_runtime_hpp(model: ModelDefinition) -> str:
     members = "\n".join(_initial_declaration(signal) for signal in signals)
     if not members:
         members = "    // This model has no signals.\n"
+    parameter_members = ""
+    if any(signal.direction is Direction.PARAMETER for signal in signals):
+        parameter_members = (
+            "\n"
+            "    // Name-based deployment parameter lookup; the runtime resolves\n"
+            "    // the transport before initialization without knowing the port name.\n"
+            "    const char* interop_parameter_string(\n"
+            "        const char* name, std::size_t* length) const override;\n"
+            "    bool interop_parameter_integer(\n"
+            "        const char* name, std::int32_t* value) const override;\n"
+        )
     exposes = _exposes_codec(model)
     codec_prelude = ""
     wire_members = ""
@@ -220,7 +262,7 @@ def _render_runtime_hpp(model: ModelDefinition) -> str:
         + "// members.  There is one typed member per signal.\n"
         + "class GeneratedModelRuntime final : public pyfmi_interop::ModelRuntime {\n"
         + "public:\n"
-        + "    GeneratedModelRuntime() = default;\n"
+        + "    GeneratedModelRuntime() { reset(); }\n"
         + "\n"
         + "    const std::vector<pyfmi_interop::SignalDescriptor>& signals() "
         + "const override;\n"
@@ -233,6 +275,7 @@ def _render_runtime_hpp(model: ModelDefinition) -> str:
         + "    void publish(pyfmi_interop::Sample& sample) const override;\n"
         + "    void consume(const pyfmi_interop::Sample& sample) override;\n"
         + wire_members
+        + parameter_members
         + "\n"
         + "    // Wire hooks.  A payload backend defines these in its codec source;\n"
         + "    // the payload is the generated interface message.\n"
@@ -253,6 +296,8 @@ def _render_runtime_hpp(model: ModelDefinition) -> str:
 
 def _render_runtime_cpp(model: ModelDefinition) -> str:
     signals = ordered_signals(model)
+    wire = wire_signals(model)
+    parameter_definitions = _render_parameter_lookups(signals)
     wire_definitions = ""
     if _exposes_codec(model):
         role = str(model.role).capitalize()
@@ -262,7 +307,7 @@ def _render_runtime_cpp(model: ModelDefinition) -> str:
         }[str(model.serialization)]
         records = ", ".join(
             f"{{{signal.value_reference}u, {signal.data_type.number}u}}"
-            for signal in signals
+            for signal in wire
         )
         wire_definitions = (
             "pyfmi_interop::TransportRole "
@@ -279,8 +324,7 @@ def _render_runtime_cpp(model: ModelDefinition) -> str:
             "    std::array<std::uint8_t, pyfmi_interop::wire::kModelIdSize>& out) "
             "const {\n"
             "    out = pyfmi_interop::wire::model_id(\n"
-            f"        std::string_view({string_literal(model.name)}), "
-            f"{float_literal(model.step_size_s)},\n"
+            f"        std::string_view({string_literal(model.name)}),\n"
             "        std::vector<pyfmi_interop::wire::ModelIdSignal>{"
             + records
             + "});\n"
@@ -325,6 +369,8 @@ def _render_runtime_cpp(model: ModelDefinition) -> str:
         + '#include "model_runtime.hpp"\n'
         + "\n"
         + '#include "model_impl.hpp"\n'
+        + "\n"
+        + "#include <cctype>\n"
         + "\n"
         + "namespace {\n"
         + "\n"
@@ -375,6 +421,7 @@ def _render_runtime_cpp(model: ModelDefinition) -> str:
         + "}\n"
         + "\n"
         + wire_definitions
+        + parameter_definitions
         + 'extern "C" pyfmi_interop::ModelRuntime* pyfmi_interop_create_model() {\n'
         + "    return new GeneratedModelRuntime();\n"
         + "}\n"
@@ -383,6 +430,97 @@ def _render_runtime_cpp(model: ModelDefinition) -> str:
         + "pyfmi_interop::ModelRuntime* model) {\n"
         + "    delete model;\n"
         + "}\n"
+    )
+
+
+def _render_parameter_lookups(signals: tuple[Signal, ...]) -> str:
+    """Name-based, per-instance access to deployment parameter members.
+
+    The runtime resolves the transport from these values before initialization.
+    Matching is case-insensitive on the last dotted segment, so a parameter
+    carried by a ``parameters`` port and one authored with a bare name resolve
+    the same way without the runtime knowing the port name.
+    """
+
+    parameters = [
+        signal for signal in signals if signal.direction is Direction.PARAMETER
+    ]
+    if not parameters:
+        return ""
+
+    def matches(signal: Signal) -> str:
+        return (
+            f'    if (parameter_key_matches(name, {string_literal(signal.name)})) {{'
+        )
+
+    string_lines = [
+        matches(signal)
+        + "\n"
+        + "        if (length != nullptr) {\n"
+        + f"            *length = std::strlen({member_name(signal)}.data());\n"
+        + "        }\n"
+        + f"        return {member_name(signal)}.data();\n"
+        + "    }"
+        for signal in parameters
+        if signal.data_type is DataType.STRING
+    ]
+    integer_lines = [
+        matches(signal)
+        + "\n"
+        + f"        *value = {member_name(signal)};\n"
+        + "        return true;\n"
+        + "    }"
+        for signal in parameters
+        if signal.data_type is DataType.INTEGER
+    ]
+    if not string_lines:
+        string_lines = ["    (void)name;"]
+    if not integer_lines:
+        integer_lines = ["    (void)name;", "    (void)value;"]
+
+    return (
+        "namespace {\n"
+        "\n"
+        "bool parameter_key_matches(const char* key, std::string_view full) {\n"
+        "    if (key == nullptr) {\n"
+        "        return false;\n"
+        "    }\n"
+        "    const std::size_t dot = full.rfind('.');\n"
+        "    const std::string_view name =\n"
+        "        dot == std::string_view::npos ? full : full.substr(dot + 1u);\n"
+        "    std::size_t index = 0;\n"
+        "    while (key[index] != '\\0' && index < name.size()) {\n"
+        "        const unsigned char left =\n"
+        "            static_cast<unsigned char>(key[index]);\n"
+        "        const unsigned char right =\n"
+        "            static_cast<unsigned char>(name[index]);\n"
+        "        if (std::tolower(left) != std::tolower(right)) {\n"
+        "            return false;\n"
+        "        }\n"
+        "        ++index;\n"
+        "    }\n"
+        "    return key[index] == '\\0' && index == name.size();\n"
+        "}\n"
+        "\n"
+        "}  // namespace\n"
+        "\n"
+        "const char* GeneratedModelRuntime::interop_parameter_string(\n"
+        "    const char* name, std::size_t* length) const {\n"
+        "    if (length != nullptr) {\n"
+        "        *length = 0u;\n"
+        "    }\n"
+        + "\n".join(string_lines)
+        + "\n"
+        "    return nullptr;\n"
+        "}\n"
+        "\n"
+        "bool GeneratedModelRuntime::interop_parameter_integer(\n"
+        "    const char* name, std::int32_t* value) const {\n"
+        + "\n".join(integer_lines)
+        + "\n"
+        "    return false;\n"
+        "}\n"
+        "\n"
     )
 
 

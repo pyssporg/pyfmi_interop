@@ -18,6 +18,7 @@
 namespace {
 
 using pyfmi_interop::DataType;
+using pyfmi_interop::Direction;
 using pyfmi_interop::ModelRuntime;
 using pyfmi_interop::Transport;
 using pyfmi_interop::ByteSpan;
@@ -98,10 +99,29 @@ std::uint32_t instance_identity(const std::string& name) {
     return hash == 0u ? 1u : hash;
 }
 
+bool declares_parameter_interface(const ModelRuntime* model) {
+    if (model == nullptr) {
+        return false;
+    }
+    for (const auto& signal : model->signals()) {
+        if (signal.direction == Direction::Parameter) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string parameter_text(const ModelRuntime* model, const char* key) {
+    std::size_t length = 0;
+    const char* value = model->interop_parameter_string(key, &length);
+    return value != nullptr ? std::string(value, length) : std::string();
+}
+
 // `PYFMI_INTEROP_TRANSPORT` carries the full URI.  The legacy endpoint
 // variable still supplies the authority for a bare scheme.  The default is
-// loopback, but only a generated model with a non-None role opens a transport.
-std::string resolve_transport_uri(std::string& error) {
+// loopback.  This channel is only consulted when the model declares no
+// parameter interface at all; an authored interface is authoritative.
+std::string resolve_environment_transport_uri(std::string& error) {
     std::string value = environment_value("PYFMI_INTEROP_TRANSPORT");
     const std::string endpoint = environment_value("PYFMI_INTEROP_TRANSPORT_ENDPOINT");
     if (value.empty()) {
@@ -115,6 +135,56 @@ std::string resolve_transport_uri(std::string& error) {
         value += "://" + endpoint;
     }
     return value;
+}
+
+// Parameter values are deployment configuration: `transport`, `bind_address`,
+// `peer_address`, `queue_depth`, and `deadline_s` are the recognised keys.  A
+// model with a parameter interface never reads the environment, so two
+// instances in one process can bind different endpoints.
+std::string resolve_transport_uri(const ModelRuntime* model, std::string& error) {
+    if (!declares_parameter_interface(model)) {
+        return resolve_environment_transport_uri(error);
+    }
+
+    const std::string scheme = parameter_text(model, "transport");
+    const std::string bind = parameter_text(model, "bind_address");
+    const std::string peer = parameter_text(model, "peer_address");
+
+    if (scheme.empty() || scheme == "loopback") {
+        return "loopback";
+    }
+    if (scheme != "udp" && scheme != "tcp") {
+        error = "parameter 'transport' value '" + scheme +
+                "' is not accepted; accepted values: loopback, udp, tcp";
+        return {};
+    }
+    if (bind.empty()) {
+        return "loopback";
+    }
+
+    std::string uri = scheme + "://" + bind;
+    if (!peer.empty()) {
+        uri += "?peer=" + peer;
+    }
+    return uri;
+}
+
+bool parameter_is_fixed(const InstanceState* instance,
+                        fmi2ValueReference value_reference) {
+    if (instance == nullptr || instance->model == nullptr) {
+        return false;
+    }
+    for (const auto& signal : instance->model->signals()) {
+        if (signal.value_reference != value_reference) {
+            continue;
+        }
+        if (signal.direction != Direction::Parameter) {
+            return false;
+        }
+        return instance->in_initialization_mode || instance->initialized ||
+               instance->terminated;
+    }
+    return false;
 }
 
 fmi2Component transport_instantiate_failure(InstanceState* instance,
@@ -215,33 +285,15 @@ fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuType,
     if (instance->codec != nullptr) {
         instance->role = instance->codec->transport_role();
     }
-    if (instance->role != TransportRole::None) {
-        if (!instance->codec->wire_model_id(instance->model_id)) {
-            return transport_instantiate_failure(
-                instance, functions, instanceName,
-                "pyfmi_interop: the model has a transport role but no wire model id");
-        }
-
-        std::string uri_error;
-        const std::string uri = resolve_transport_uri(uri_error);
-        if (uri.empty()) {
-            return transport_instantiate_failure(
-                instance, functions, instanceName,
-                "pyfmi_interop: " + (uri_error.empty()
-                                         ? std::string("no transport URI configured")
-                                         : uri_error));
-        }
-
-        try {
-            std::unique_ptr<Transport> transport = pyfmi_interop::make_transport(uri);
-            transport->initialize(uri);
-            instance->transport = std::move(transport);
-        } catch (const std::exception& error) {
-            return transport_instantiate_failure(
-                instance, functions, instanceName,
-                "pyfmi_interop: transport '" + uri + "' failed: " + error.what());
-        }
+    if (instance->role != TransportRole::None &&
+        !instance->codec->wire_model_id(instance->model_id)) {
+        return transport_instantiate_failure(
+            instance, functions, instanceName,
+            "pyfmi_interop: the model has a transport role but no wire model id");
     }
+
+    // The transport is opened in fmi2EnterInitializationMode, after the master
+    // has written the parameter values that configure it.
 
     return instance;
 }
@@ -285,6 +337,33 @@ fmi2Status fmi2EnterInitializationMode(fmi2Component c) {
     if (instance == nullptr) {
         return fmi2Error;
     }
+
+    if (instance->role != TransportRole::None) {
+        if (instance->transport) {
+            instance->transport->finalize();
+            instance->transport.reset();
+        }
+
+        std::string uri_error;
+        const std::string uri = resolve_transport_uri(instance->model, uri_error);
+        if (uri.empty()) {
+            return report_error(
+                instance, "fmi2EnterInitializationMode: " +
+                              (uri_error.empty()
+                                   ? std::string("no transport URI configured")
+                                   : uri_error));
+        }
+
+        try {
+            std::unique_ptr<Transport> transport = pyfmi_interop::make_transport(uri);
+            transport->initialize(uri);
+            instance->transport = std::move(transport);
+        } catch (const std::exception& error) {
+            return report_error(instance, "fmi2EnterInitializationMode: transport '" +
+                                              uri + "' failed: " + error.what());
+        }
+    }
+
     instance->in_initialization_mode = true;
     instance->current_time = instance->start_time;
     return fmi2OK;
@@ -436,6 +515,11 @@ fmi2Status fmi2SetReal(fmi2Component c, const fmi2ValueReference vr[], size_t nv
     }
 
     for (size_t index = 0; index < nvr; ++index) {
+        if (parameter_is_fixed(instance, vr[index])) {
+            return report_error(instance, "fmi2SetReal: parameter value reference " +
+                                              std::to_string(vr[index]) +
+                                              " is fixed after initialization");
+        }
         if (!instance->model->write(vr[index], Value::make_real(value[index]))) {
             return report_error(instance, "fmi2SetReal: value reference " +
                                               std::to_string(vr[index]) +
@@ -453,6 +537,11 @@ fmi2Status fmi2SetInteger(fmi2Component c, const fmi2ValueReference vr[], size_t
     }
 
     for (size_t index = 0; index < nvr; ++index) {
+        if (parameter_is_fixed(instance, vr[index])) {
+            return report_error(instance, "fmi2SetInteger: parameter value reference " +
+                                              std::to_string(vr[index]) +
+                                              " is fixed after initialization");
+        }
         if (!instance->model->write(
                 vr[index], Value::make_integer(static_cast<std::int32_t>(value[index])))) {
             return report_error(instance, "fmi2SetInteger: value reference " +
@@ -471,6 +560,11 @@ fmi2Status fmi2SetBoolean(fmi2Component c, const fmi2ValueReference vr[], size_t
     }
 
     for (size_t index = 0; index < nvr; ++index) {
+        if (parameter_is_fixed(instance, vr[index])) {
+            return report_error(instance, "fmi2SetBoolean: parameter value reference " +
+                                              std::to_string(vr[index]) +
+                                              " is fixed after initialization");
+        }
         if (!instance->model->write(vr[index],
                                     Value::make_boolean(value[index] == fmi2True))) {
             return report_error(instance, "fmi2SetBoolean: value reference " +
@@ -492,6 +586,11 @@ fmi2Status fmi2SetString(fmi2Component c, const fmi2ValueReference vr[], size_t 
         if (value[index] == nullptr) {
             return report_error(instance, "fmi2SetString: null string at index " +
                                               std::to_string(index));
+        }
+        if (parameter_is_fixed(instance, vr[index])) {
+            return report_error(instance, "fmi2SetString: parameter value reference " +
+                                              std::to_string(vr[index]) +
+                                              " is fixed after initialization");
         }
         if (!instance->model->write(vr[index], Value::make_string(value[index]))) {
             return report_error(instance, "fmi2SetString: value reference " +

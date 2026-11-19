@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -112,6 +113,26 @@ public:
     // direction mismatch; the FMI facade maps that to fmi2Error.
     virtual bool read(std::uint32_t value_reference, Value& out) const = 0;
     virtual bool write(std::uint32_t value_reference, const Value& value) = 0;
+
+    // Optional name-based deployment parameter access.  A generated model with
+    // a parameter interface overrides these to read its own typed members, so
+    // the runtime can resolve configuration per instance before initialization
+    // without knowing the parameter port name.  The default means "no
+    // parameter interface".
+    virtual const char* interop_parameter_string(const char* name,
+                                                 std::size_t* length) const {
+        (void)name;
+        if (length != nullptr) {
+            *length = 0u;
+        }
+        return nullptr;
+    }
+    virtual bool interop_parameter_integer(const char* name,
+                                           std::int32_t* value) const {
+        (void)name;
+        (void)value;
+        return false;
+    }
 
     // Transport exchange hooks.  The generated model owns sample population;
     // defaults are no-ops.  Both hooks run inside the step deadline and must

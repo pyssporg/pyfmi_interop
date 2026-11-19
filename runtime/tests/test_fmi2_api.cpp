@@ -215,7 +215,7 @@ public:
             records.push_back({signal.value_reference,
                                static_cast<std::uint8_t>(signal.type)});
         }
-        out = pyfmi_interop::wire::model_id("test", 0.5, records);
+        out = pyfmi_interop::wire::model_id("test", records);
         return true;
     }
 
@@ -433,18 +433,24 @@ int main() {
 
     fmi2FreeInstance(component);
 
-    // A role with an unknown backend must make instantiate fail clearly.
+    // The transport is opened in fmi2EnterInitializationMode; an unavailable
+    // backend must make that call fail clearly, not instantiate.
     set_role("adapter");
     set_transport("does-not-exist");
     g_last_log.clear();
     component = fmi2Instantiate("bad-transport", fmi2CoSimulation, "guid",
                                 "file:///tmp", &callbacks, fmi2False, fmi2False);
-    if (component != nullptr) {
-        return fail("instantiate must fail for an unavailable transport");
+    if (component == nullptr) {
+        return fail("instantiate must not open the transport");
+    }
+    if (fmi2SetupExperiment(component, fmi2False, 0.0, 0.0, fmi2False, 0.0) != fmi2OK ||
+        fmi2EnterInitializationMode(component) != fmi2Error) {
+        return fail("enterInitializationMode must fail for an unavailable transport");
     }
     if (g_last_log.find("unknown transport") == std::string::npos) {
         return fail("unavailable transport failure must log a clear message");
     }
+    fmi2FreeInstance(component);
 
     // Role-aware stepping: adapter does receive -> apply -> step -> publish ->
     // send around a loopback byte transport.  The first step has no inbound

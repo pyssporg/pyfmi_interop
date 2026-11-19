@@ -184,12 +184,6 @@ Sha256Digest sha256_bytes(const std::vector<std::uint8_t>& input) noexcept {
     return digest;
 }
 
-void append_u64_le(std::vector<std::uint8_t>& target, std::uint64_t value) {
-    for (int index = 0; index < 8; ++index) {
-        target.push_back(static_cast<std::uint8_t>((value >> (8 * index)) & 0xFFu));
-    }
-}
-
 }  // namespace
 
 const char* error_code_name(ErrorCode code) noexcept {
@@ -265,18 +259,13 @@ std::array<std::uint8_t, 32> sha256(const std::uint8_t* data, std::size_t size) 
 }
 
 std::array<std::uint8_t, kModelIdSize> model_id(
-    std::string_view name, double step_size_s,
+    std::string_view name,
     const std::vector<ModelIdSignal>& signals) {
     std::vector<std::uint8_t> input;
-    static constexpr char domain[] = "pyfmi_interop.model-id.v1";
+    static constexpr char domain[] = "pyfmi_interop.model-id.v2";
     input.insert(input.end(), domain, domain + sizeof(domain));  // includes the NUL
     input.insert(input.end(), name.begin(), name.end());
     input.push_back(0x00u);
-
-    std::uint64_t step_bits = 0;
-    static_assert(sizeof(step_bits) == sizeof(step_size_s), "double must be 64-bit");
-    std::memcpy(&step_bits, &step_size_s, sizeof(step_bits));
-    append_u64_le(input, step_bits);
 
     std::vector<ModelIdSignal> ordered = signals;
     std::sort(ordered.begin(), ordered.end(),

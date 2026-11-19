@@ -49,7 +49,7 @@ def make_model() -> ModelDefinition:
     )
 
 
-def test_proto_projects_every_signal_with_its_ir_id():
+def test_proto_projects_every_wire_signal_with_its_ir_id():
     model = make_model()
     text = render_proto(model)
     fields = {
@@ -59,8 +59,12 @@ def test_proto_projects_every_signal_with_its_ir_id():
 
     assert fields == {
         signal.value_reference: signal.name
-        for signal in sorted(model.signals, key=lambda item: item.value_reference)
+        for signal in model.signals
+        if signal.direction is not Direction.PARAMETER
     }
+
+    assert "Value enable" not in text
+    assert "Value mode" not in text
     assert 'syntax = "proto3";' in text
     assert "package pyfmi_interop.wire;" in text
     assert "message demo_model {" in text
@@ -153,9 +157,10 @@ def test_wire_direction_inverts_fmi_causality():
         "speed": "in",  # FMI output
         "setpoint": "out",  # FMI input
         "label": "in",  # FMI output
-        "enable": "none",  # parameter
-        "mode": "none",  # parameter
     }
+    # Parameters are configuration, never a wire field.
+    assert "enable" not in directions
+    assert "mode" not in directions
 
 
 def test_wire_json_projects_every_signal_with_ir_metadata():
@@ -202,28 +207,6 @@ def test_wire_json_projects_every_signal_with_ir_metadata():
             "rate_hz": None,
             "unit": None,
             "wire": "in",
-        },
-        {
-            "capacity": 0,
-            "data_type": "boolean",
-            "direction": "parameter",
-            "field": "enable",
-            "id": 3,
-            "name": "enable",
-            "rate_hz": None,
-            "unit": None,
-            "wire": "none",
-        },
-        {
-            "capacity": 0,
-            "data_type": "integer",
-            "direction": "parameter",
-            "field": "mode",
-            "id": 4,
-            "name": "mode",
-            "rate_hz": None,
-            "unit": None,
-            "wire": "none",
         },
         {
             "capacity": 0,

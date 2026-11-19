@@ -2,7 +2,7 @@
 // Schema format version: 1
 // Model: demo_model
 // GUID: c6bce198-42d9-524f-a49e-bdbba3fc7b6f
-// Model id: 983f897eb99c8464
+// Model id: 0d82b76145f42ca2
 
 syntax = "proto3";
 
@@ -27,10 +27,6 @@ message demo_model {
   Value speed = 1;
   // name=label type=string direction=output rate=base unit=unspecified capacity=16
   Value label = 2;
-  // name=enable type=boolean direction=parameter rate=base unit=unspecified capacity=0
-  Value enable = 3;
-  // name=mode type=integer direction=parameter rate=base unit=unspecified capacity=0
-  Value mode = 4;
   // name=setpoint type=real direction=input rate=50.0 Hz unit=unspecified capacity=0
   Value setpoint = 5;
 }

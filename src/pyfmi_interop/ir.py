@@ -343,7 +343,7 @@ class ModelDefinition:
 
     name: str
     guid: str
-    step_size_s: float
+    step_size_s: float | None = None
     realtime: bool = True
     signals: tuple[Signal, ...] = ()
     rate_groups: tuple[RateGroup, ...] = ()
@@ -365,8 +365,11 @@ class ModelDefinition:
                 f"model name {self.name!r} must be a C identifier "
                 "(letters, digits, underscore; not starting with a digit)"
             )
-        if self.step_size_s <= 0:
-            raise ValueError("step_size_s must be > 0")
+        if self.step_size_s is not None:
+            if self.step_size_s <= 0:
+                raise ValueError("step_size_s must be > 0")
+        elif self.realtime:
+            raise ValueError("realtime models require step_size_s")
         if not self.guid:
             raise ValueError("guid must not be empty")
         for label, value in (
@@ -378,7 +381,7 @@ class ModelDefinition:
                 raise ValueError(f"{label} must be a non-empty string or None")
 
     @property
-    def base_period_s(self) -> float:
+    def base_period_s(self) -> float | None:
         return self.step_size_s
 
     def signal(self, name: str) -> Signal:
@@ -415,17 +418,6 @@ class ModelDefinition:
         known = set(names)
         grouped: set[str] = set()
         for group in self.rate_groups:
-            if group.period_s < self.step_size_s - 1e-12:
-                raise ValueError(
-                    f"{group.name}: period {group.period_s}s is shorter than the "
-                    f"step size {self.step_size_s}s"
-                )
-            ratio = group.period_s / self.step_size_s
-            if abs(ratio - round(ratio)) > 1e-9:
-                raise ValueError(
-                    f"{group.name}: period {group.period_s}s is not an integer "
-                    f"multiple of step size {self.step_size_s}s"
-                )
             for signal_name in group.signals:
                 if signal_name not in known:
                     raise ValueError(
@@ -437,15 +429,67 @@ class ModelDefinition:
                     )
                 grouped.add(signal_name)
 
+        if self.realtime:
+            base = self.step_size_s
+            assert base is not None
+            self._validate_periods(base)
+        else:
+            # An adapter moves bytes once per master step; its timing facts are
+            # the declared rates relative to the slowest one, not a base step.
+            rates = [
+                signal.rate_hz
+                for signal in self.signals
+                if signal.rate_hz is not None
+            ]
+            if rates:
+                self._validate_periods(1.0 / min(rates))
+
+    def _validate_periods(self, base_period_s: float) -> None:
+        """Check rate groups and signal rates against ``base_period_s``.
+
+        A realtime model uses its step size as the base (every period is an
+        integer multiple of the step).  An adapter uses the period of its
+        slowest declared rate as the base; there is no step.
+        """
+
+        if self.realtime:
+            unit = f"step size {base_period_s}s"
+            for group in self.rate_groups:
+                if group.period_s < base_period_s - 1e-12:
+                    raise ValueError(
+                        f"{group.name}: period {group.period_s}s is shorter than the "
+                        f"step size {base_period_s}s"
+                    )
+                ratio = group.period_s / base_period_s
+                if abs(ratio - round(ratio)) > 1e-9:
+                    raise ValueError(
+                        f"{group.name}: period {group.period_s}s is not an integer "
+                        f"multiple of step size {base_period_s}s"
+                    )
+        else:
+            unit = f"slowest declared rate period {base_period_s}s"
+            for group in self.rate_groups:
+                ratio = group.period_s / base_period_s
+                if abs(ratio - round(ratio)) > 1e-9:
+                    raise ValueError(
+                        f"{group.name}: period {group.period_s}s is not an integer "
+                        f"multiple of the {unit}"
+                    )
+
         for signal in self.signals:
             if signal.rate_hz is not None:
                 period = signal.period_s
                 assert period is not None
-                ratio = period / self.step_size_s
+                ratio = period / base_period_s
                 if abs(ratio - round(ratio)) > 1e-9:
+                    if self.realtime:
+                        raise ValueError(
+                            f"{signal.name}: rate {signal.rate_hz} Hz does not align "
+                            f"with step size {base_period_s}s"
+                        )
                     raise ValueError(
-                        f"{signal.name}: rate {signal.rate_hz} Hz does not align "
-                        f"with step size {self.step_size_s}s"
+                        f"{signal.name}: rate {signal.rate_hz} Hz is not an integer "
+                        f"multiple of the {unit}"
                     )
 
     def with_value_references(self) -> "ModelDefinition":
@@ -539,7 +583,11 @@ def model_from_dict(payload: Mapping[str, Any]) -> ModelDefinition:
     return ModelDefinition(
         name=payload["name"],
         guid=payload["guid"],
-        step_size_s=float(payload["step_size_s"]),
+        step_size_s=(
+            None
+            if payload.get("step_size_s") is None
+            else float(payload["step_size_s"])
+        ),
         realtime=bool(payload.get("realtime", True)),
         signals=signals,
         rate_groups=rate_groups,
