@@ -1,7 +1,8 @@
 """Realtime FMI generation, build and packaging for distributed simulation.
 
-The public surface is the IR (:mod:`pyfmi_interop.ir`), the adapter
-catalogue (:mod:`pyfmi_interop.adapters`), the C++ generator
+The public surface is the IR (:mod:`pyfmi_interop.ir`), the wire envelope
+(:mod:`pyfmi_interop.wire`), the adapter catalogue
+(:mod:`pyfmi_interop.adapters`), the C++ generator
 (:mod:`pyfmi_interop.codegen`), the native build driver
 (:mod:`pyfmi_interop.builder`), the FMU packager
 (:mod:`pyfmi_interop.packaging`), and the ``pyfmi-interop`` CLI.
@@ -16,7 +17,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from . import adapters, builder, codegen, ir, native, packaging
+from . import adapters, builder, codegen, ir, native, packaging, wire
 from .adapters import (
     ADAPTERS,
     AdapterDescriptor,
@@ -44,6 +45,26 @@ from .ir import (
     write_model_json,
 )
 from .packaging import package_fmu
+from .wire import (
+    HEADER_SIZE,
+    WIRE_VERSION,
+    ChecksumError,
+    DecodedFrame,
+    FieldRangeError,
+    Header,
+    HeaderChecksumError,
+    InvalidHeaderSize,
+    InvalidMagic,
+    LengthOverflow,
+    PayloadChecksumError,
+    TrailingBytes,
+    TruncatedFrame,
+    UnsupportedWireVersion,
+    WireError,
+    decode,
+    encode,
+    model_id,
+)
 
 __version__ = "0.2.0"
 
@@ -55,13 +76,28 @@ _LAZY_MODULES = {
 __all__ = [
     "ADAPTERS",
     "AdapterDescriptor",
+    "ChecksumError",
     "DataType",
+    "DecodedFrame",
     "Direction",
+    "FieldRangeError",
+    "HEADER_SIZE",
+    "Header",
+    "HeaderChecksumError",
+    "InvalidHeaderSize",
+    "InvalidMagic",
+    "LengthOverflow",
     "ModelDefinition",
+    "PayloadChecksumError",
     "ProjectionError",
     "RateGroup",
     "Signal",
+    "TrailingBytes",
     "TransportBinding",
+    "TruncatedFrame",
+    "UnsupportedWireVersion",
+    "WIRE_VERSION",
+    "WireError",
     "__version__",
     "adapter_cmake_flags",
     "adapters",
@@ -70,13 +106,16 @@ __all__ = [
     "build_model",
     "builder",
     "codegen",
+    "decode",
     "deterministic_guid",
+    "encode",
     "encode_string",
     "fingerprint",
     "generate_model",
     "get_adapter",
     "ir",
     "model_from_dict",
+    "model_id",
     "model_to_dict",
     "native",
     "package_fmu",
@@ -84,6 +123,7 @@ __all__ = [
     "require_adapter",
     "sysml",
     "timing",
+    "wire",
     "write_model_json",
 ]
 

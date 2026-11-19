@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency acquisition order: installed package (vcpkg/system), then
   `third_party/<lib>` submodule, then FetchContent with
   `-DPYFMI_DIST_ALLOW_FETCH=ON`, then a hard error naming the upstream URL.
+- Versioned 48-byte wire envelope (`pyfmi_interop.wire`): little-endian magic,
+  wire version, header size, derived 8-byte model id, instance, sequence,
+  nanosecond timestamp, payload length, payload CRC32, and header CRC32 around
+  an opaque protobuf payload. `encode`/`decode`/`model_id` with a typed
+  `WireError` taxonomy, documented byte layout and golden frames in
+  `docs/wire.md`.
 
 ### Changed
 
