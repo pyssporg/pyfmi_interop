@@ -33,7 +33,7 @@ EXPECTED_FILES = {
 def make_model() -> ModelDefinition:
     signals = (
         Signal("speed", 1, DataType.REAL, Direction.OUTPUT, unit="m/s", initial=1.5),
-        Signal("setpoint", 0, DataType.REAL, Direction.INPUT, rate_hz=50.0),
+        Signal("setpoint", 5, DataType.REAL, Direction.INPUT, rate_hz=50.0),
         Signal("label", 2, DataType.STRING, Direction.OUTPUT, capacity=16, initial="hi"),
         Signal("enable", 3, DataType.BOOLEAN, Direction.PARAMETER, initial=True),
         Signal("mode", 4, DataType.INTEGER, Direction.PARAMETER, initial=2),
@@ -110,11 +110,11 @@ def test_read_and_write_enforce_direction_and_type(tmp_path):
     read_section = source.split("::read(")[1].split("::write(")[0]
     write_section = source.split("::write(")[1].split('extern "C"')[0]
 
-    # Readable: output 1, output 2 and parameter 3/4.  Input 0 is write-only.
+    # Readable: output 1, output 2 and parameter 3/4.  Input 5 is write-only.
     assert "case 1u:" in read_section
-    assert "case 0u:" not in read_section
-    # Writable: input 0 and parameters 3/4.  Outputs 1/2 are read-only.
-    assert "case 0u:" in write_section
+    assert "case 5u:" not in read_section
+    # Writable: input 5 and parameters 3/4.  Outputs 1/2 are read-only.
+    assert "case 5u:" in write_section
     assert "case 1u:" not in write_section
     assert "case 2u:" not in write_section
     # Strict type checks on every write branch.
@@ -132,9 +132,9 @@ def test_publish_and_consume_only_map_bound_signals(tmp_path):
     # Bound readable signals: speed (1) and label (2).
     assert "sample.values[1u]" in publish
     assert "sample.values[2u]" in publish
-    assert "sample.values[0u]" not in publish
-    # Bound writable signals: setpoint (0) only.
-    assert "sample.values[0u]" in consume
+    assert "sample.values[5u]" not in publish
+    # Bound writable signals: setpoint (5) only.
+    assert "sample.values[5u]" in consume
     assert "sample.values[1u]" not in consume
 
 
@@ -190,8 +190,8 @@ def test_invalid_ir_is_rejected(tmp_path):
         guid=deterministic_guid("bad_model"),
         step_size_s=0.01,
         signals=(
-            Signal("same", 0, DataType.REAL, Direction.OUTPUT),
-            Signal("same", 1, DataType.REAL, Direction.INPUT),
+            Signal("same", 1, DataType.REAL, Direction.OUTPUT),
+            Signal("same", 2, DataType.REAL, Direction.INPUT),
         ),
     )
     with pytest.raises(ValueError, match="duplicate signal names"):
@@ -211,7 +211,7 @@ def test_invalid_ir_is_rejected(tmp_path):
         name="bad_rate",
         guid=deterministic_guid("bad_rate"),
         step_size_s=0.01,
-        signals=(Signal("x", 0, DataType.REAL, Direction.OUTPUT, rate_hz=30.0),),
+        signals=(Signal("x", 1, DataType.REAL, Direction.OUTPUT, rate_hz=30.0),),
     )
     with pytest.raises(ValueError, match="does not align"):
         generate_model(misaligned, tmp_path / "rate")

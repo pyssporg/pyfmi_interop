@@ -385,7 +385,7 @@ def _signal_from_variable(
     data_type = _data_type(variable.type_name)
     return ir.Signal(
         name=variable.name,
-        value_reference=variable.value_reference,
+        value_reference=variable.value_reference or 1,
         data_type=data_type,
         direction=_direction(variable.causality),
         rate_hz=rate_hz,

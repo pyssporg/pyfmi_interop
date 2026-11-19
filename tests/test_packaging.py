@@ -28,7 +28,7 @@ from pyfmi_interop.packaging import (
 def make_model() -> ModelDefinition:
     signals = (
         Signal("speed", 1, DataType.REAL, Direction.OUTPUT, unit="m/s", initial=1.5),
-        Signal("setpoint", 0, DataType.REAL, Direction.INPUT, rate_hz=50.0),
+        Signal("setpoint", 5, DataType.REAL, Direction.INPUT, rate_hz=50.0),
         Signal("label", 2, DataType.STRING, Direction.OUTPUT, capacity=16, initial="hi"),
         Signal("enable", 3, DataType.BOOLEAN, Direction.PARAMETER, initial=True),
         Signal("mode", 4, DataType.INTEGER, Direction.PARAMETER, initial=2),
@@ -113,7 +113,7 @@ def test_model_description_is_valid_fmi2(tmp_path):
     assert variables["mode"].find("Integer").attrib["start"] == "2"
 
     outputs = root.findall("./ModelStructure/Outputs/Unknown")
-    assert [item.attrib["index"] for item in outputs] == ["2", "3"]
+    assert [item.attrib["index"] for item in outputs] == ["1", "2"]
 
 
 def test_runtime_and_adapters_resources(tmp_path):

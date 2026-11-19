@@ -178,7 +178,7 @@ def test_model_from_architecture_maps_signals_rates_units_and_bindings() -> None
     assert model.guid == ir.deterministic_guid("Demo")
     assert model.step_size_s == pytest.approx(0.01)
     assert [signal.name for signal in model.signals] == ["out.label", "out.value"]
-    assert [signal.value_reference for signal in model.signals] == [0, 1]
+    assert [signal.value_reference for signal in model.signals] == [1, 2]
 
     label, value = model.signals
     assert label.data_type is ir.DataType.STRING

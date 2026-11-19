@@ -21,7 +21,7 @@ from pyfmi_interop.ir import (
 def make_model() -> ModelDefinition:
     signals = (
         Signal("speed", 1, DataType.REAL, Direction.OUTPUT, unit="m/s"),
-        Signal("setpoint", 0, DataType.REAL, Direction.INPUT, rate_hz=50.0),
+        Signal("setpoint", 2, DataType.REAL, Direction.INPUT, rate_hz=50.0),
     )
     bindings = (
         TransportBinding("speed", "hla", "Speed", Direction.OUTPUT),
@@ -67,7 +67,7 @@ def test_inspect_model_json(tmp_path, capsys):
     assert "model: demo_model" in output
     assert "signals: 2" in output
     assert "1: speed (real, output, unit=m/s)" in output
-    assert "0: setpoint (real, input, rate_hz=50.0)" in output
+    assert "2: setpoint (real, input, rate_hz=50.0)" in output
     assert "bindings: 2" in output
     assert "rate_groups: 1" in output
 

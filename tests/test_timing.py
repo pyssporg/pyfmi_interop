@@ -15,7 +15,7 @@ def _signal(
     name: str,
     rate_hz: float | None = None,
     *,
-    value_reference: int = 0,
+    value_reference: int = 1,
 ) -> ir.Signal:
     return ir.Signal(
         name=name,
@@ -59,12 +59,12 @@ def test_frequency_and_period_reject_non_positive_or_non_finite(value: float) ->
 def test_infer_rate_groups_is_deterministic_and_deadline_is_80_percent() -> None:
     model = _model(
         [
-            _signal("fast", None, value_reference=0),
-            _signal("also_fast", None, value_reference=1),
-            _signal("one_hz", 1.0, value_reference=2),
-            _signal("ten_b", 10.0, value_reference=3),
-            _signal("ten_a", 10.0, value_reference=4),
-            _signal("half_hz", 0.5, value_reference=5),
+            _signal("fast", None, value_reference=1),
+            _signal("also_fast", None, value_reference=2),
+            _signal("one_hz", 1.0, value_reference=3),
+            _signal("ten_b", 10.0, value_reference=4),
+            _signal("ten_a", 10.0, value_reference=5),
+            _signal("half_hz", 0.5, value_reference=6),
         ]
     )
 
@@ -98,9 +98,9 @@ def test_infer_rate_groups_omits_base_when_every_signal_has_a_rate() -> None:
 def test_inferred_groups_pass_model_and_timing_validation() -> None:
     model = _model(
         [
-            _signal("fast", None, value_reference=0),
-            _signal("one_hz", 1.0, value_reference=1),
-            _signal("ten_hz", 10.0, value_reference=2),
+            _signal("fast", None, value_reference=1),
+            _signal("one_hz", 1.0, value_reference=2),
+            _signal("ten_hz", 10.0, value_reference=3),
         ],
         step_size_s=0.001,
     )
@@ -148,7 +148,7 @@ def test_validate_timing_rejects_duplicate_group_names() -> None:
     first = ir.RateGroup(name="dup", period_s=0.1, deadline_s=0.08, signals=("a",))
     second = ir.RateGroup(name="dup", period_s=0.1, deadline_s=0.08, signals=("b",))
     model = _model(
-        [_signal("a", None, value_reference=0), _signal("b", None, value_reference=1)],
+        [_signal("a", None, value_reference=1), _signal("b", None, value_reference=2)],
         rate_groups=(first, second),
     )
 
