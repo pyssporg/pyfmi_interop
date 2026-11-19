@@ -25,56 +25,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `pyfmi_distributed` Python module and the `pyfmi-distributed`
   distribution/CLI names are removed without shims.
 
-## [Unreleased]
+## [0.3.0] - 2026-11-19
+
+First wire-only release. This is a breaking release: everything that bound the
+model interface to a protocol is gone, and the wire envelope is the only
+contract.
 
 ### Breaking
 
-- Breaking: remove the adapter catalogue and protocol submodules; adapter names
-  are no longer accepted.
+- Remove the adapter catalogue, `TransportBinding`/`bindings`, and adapter
+  names; `pyfmi-interop` no longer accepts an adapter. Model JSON that still
+  carries `bindings` loads and ignores the field.
+- Remove `third_party/{OpenRTI,DCPLib,ED247_LIBRARY}` and the protocol-submodule
+  build integration that depended on them: the HLA, DCP, ED-247, DIS, and ROS 2
+  adapter stubs, `AdapterDependency`, `vcpkg_features()`, `adapter_manifest()`,
+  and the `adapters` CLI verb. Transport, medium, and discovery belong outside
+  this repository.
+- The unreleased adapter and submodule work from the pre-0.3.0 line is removed
+  before this release; it never shipped.
 
 ### Added
 
-- Git repository with pinned protocol submodules: OpenRTI (HLA, `fb454e6`),
-  DCPLib (ASAM X-DCP, `v0.2`), and Airbus ED247_LIBRARY (`VA2.3.0`).
-- Build-only integration workarounds for OpenRTI's top-level CMake assumptions
-  and ED247_LIBRARY's missing `<limits>` include; the submodules stay pristine.
-- Python IR with typed signals, value references, rate groups, and transport
-  bindings.
-- SysML v2 ingestion through `pycps_sysml2` and `pyfmi_sysml2`, plus JSON IR
-  loading.
-- C++17 code generation for a typed model runtime, binding hooks, the
-  `user_step` hook, and the `pyfmi_distributed_create_model` factory.
-- Static runtime with the `ModelRuntime` interface, a fixed-step realtime
-  scheduler, and the `Transport` registry.
-- Loopback adapter, always built.
-- Compile-gated HLA, DIS, DCP, ROS 2, and ED-247 adapter stubs behind
-  `PYFMI_DIST_ENABLE_*`, default OFF.
-- CMake model build and deterministic FMI 2.0 CoSimulation packaging.
-- `pyfmi-distributed` CLI with `adapters`, `inspect`, `generate`, `build`, and
-  `package`.
-- Product breakdown, architecture, adapter, and usage documentation.
-- Example 1 kHz loopback model in `examples/loopback/model.json`.
-- Adapter dependency metadata (`AdapterDependency`) plus `vcpkg_features()` and
-  `adapter_manifest()`, with a `vcpkg.json` feature manifest and
-  `cmake/adapters.cmake` acquisition layer.
-- Dependency acquisition order: installed package (vcpkg/system), then
-  `third_party/<lib>` submodule, then FetchContent with
-  `-DPYFMI_DIST_ALLOW_FETCH=ON`, then a hard error naming the upstream URL.
-- Versioned 48-byte wire envelope (`pyfmi_interop.wire`): little-endian magic,
-  wire version, header size, derived 8-byte model id, instance, sequence,
-  nanosecond timestamp, payload length, payload CRC32, and header CRC32 around
-  an opaque protobuf payload. `encode`/`decode`/`model_id` with a typed
-  `WireError` taxonomy, documented byte layout and golden frames in
+- Versioned 48-byte wire envelope (`pyfmi_interop.wire`): little-endian magic
+  (`PFMI`), wire version, header size, derived 8-byte model id, instance,
+  sequence, nanosecond timestamp, payload length, payload CRC32, and header
+  CRC32 around an opaque protobuf payload. `encode`/`decode`/`model_id` with a
+  typed `WireError` taxonomy, the exact byte layout, and golden frames in
   `docs/wire.md`.
+- Deterministic model-id derivation: the first 8 bytes of SHA-256 over the
+  domain separator, the model name, the step size, and the signal records
+  ordered by `(value_reference, name)`; the C++ end reproduces the Python
+  vectors.
 - Schema bundle shipped inside every packaged FMU: `<Model>.proto` (proto3,
   payload fields numbered by IR `value_reference`) and `wire.json` (format
   version, model id, step size, signals, rate groups), both deterministic and
   emitted next to the binary. The `schema` CLI verb writes the bundle from a
   `model.json`; `ProjectionError` fails packaging instead of dropping a signal.
 - C++ end of the wire envelope in `runtime/src/wire.cpp`: packed little-endian
-  header, CRC32/ISO-HDLC, and a portable SHA-256 model id that reproduces the
-  Python vectors for `demo` and `demo_model`. `encode_frame` / `decode_frame`
-  return typed `ErrorCode` failures mirroring the Python `WireError` taxonomy.
+  header, CRC32/ISO-HDLC, and a portable SHA-256 model id that matches the
+  Python vectors. `encode_frame`/`decode_frame` return typed `ErrorCode`
+  failures mirroring the Python `WireError` taxonomy.
 - `PYFMI_INTEROP_WIRE` string option (`protobuf` or `raw`) in
   `cmake/wire.cmake`, exposed as the `PYFMI_INTEROP_WIRE_MODE` cache variable,
   target property, and compile definition. It defaults to `protobuf` when
@@ -84,15 +74,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   values to and from `<Model>Payload` through the protobuf reflection API, and
   builds a `wire_conformance` executable whose frames are byte-identical to
   Python `wire.encode`.
-- Runtime wire tests cover the Python golden frames, round-trip, CRC, version,
-  truncation, and trailing-byte failures in both wire modes; a Python/C++
-  conformance test asserts frame byte identity.
+- CLI `transports` verb listing the byte transport names, plus Python/C++
+  conformance tests that cover the golden frames, round-trip, CRC, version,
+  truncation, trailing-byte failures, and frame byte identity in both wire
+  modes.
+- IR field-id contract: value references are wire field ids assigned once and
+  append-only (`0` reserved); `DataType` and `Direction` keep stable JSON
+  strings with frozen protobuf enum numbers (`0` = wire unspecified); string
+  signals carry a positive capacity; `unit is None` means unspecified and
+  `unit == ""` means dimensionless.
 
 ### Changed
 
 - The wheel is a platform wheel carrying the prebuilt static runtime; the
   native runtime must be built before `python -m build`.
-- Non-loopback adapters ship as unavailable stubs until their library is enabled
-  and their binding is implemented.
-- Corrected DCP: it is ASAM X-DCP (Distributed Co-Simulation Protocol),
-  implemented by DCPLib, not DDS.
