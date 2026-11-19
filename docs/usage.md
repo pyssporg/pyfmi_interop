@@ -45,6 +45,9 @@ packages.
   generator consumes after ingestion, so it is the direct path for tests and
   for tools that build the IR themselves.
 
+A checked-in SysML example that drives the same pipeline through the Python API
+(load, generate, build, package) is `examples/adapter/`; see its README.
+
 Run `inspect` first to validate the IR and see the resolved signal table
 without emitting anything:
 

@@ -1,13 +1,15 @@
 # Examples
 
-Checked-in examples are inputs, not build output. Each one is a small IR JSON
-model that the CLI can inspect, generate from, build, and package without a
-SysML dependency. No binaries, generated sources, or `.fmu` archives are
-checked in.
+Checked-in examples are inputs, not build output. `loopback/` is a small IR
+JSON model that the CLI can inspect, generate from, build, and package without
+a SysML dependency; `adapter/` is a SysML v2 part definition driven through the
+Python API into an adapter `.fmu`. No binaries, generated sources, or `.fmu`
+archives are checked in.
 
-| Example | Model | Step | Signals |
-| --- | --- | --- | --- |
-| `loopback/` | `LoopbackModel` | 1 kHz | one real input `u`, one real output `y` |
+| Example | Input | Model | Step | Signals |
+| --- | --- | --- | --- | --- |
+| `loopback/` | IR JSON | `LoopbackModel` | 1 kHz | one real input `u`, one real output `y` |
+| `adapter/` | SysML v2 | `ActuatorLinkAdapter` | 1 kHz | `Command` in (Real, Integer, Boolean, `Real[3]`) and `Feedback` out (Real, Integer, Boolean, `Real[2]`) |
 
 ## Run an example
 
@@ -25,3 +27,10 @@ pyfmi-interop package build/loopback \
 
 Build output stays under `build/`, which is ignored by Git. The IR JSON format
 is the `ModelDefinition` serialization described in `docs/usage.md`.
+
+The adapter example generates, builds, and packages an FMU from SysML with the
+Python API instead of the CLI; see `adapter/README.md`:
+
+```bash
+python examples/adapter/generate_adapter_fmu.py --serialization protobuf
+```
