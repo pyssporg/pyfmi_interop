@@ -21,3 +21,8 @@ Records live in the cold-storage archive; extract one with `pb archive read <ID>
   An adapter executes once per fmi2DoStep and never schedules, so step size leaves its wire identity, its model description and its build inputs; the realtime model keeps the fixed step.
 - **ID-005** — Core/SysML split, one parse, one FMI facade per artifact · accepted · 2026-11-20 · `ID-005`
   The Python layer splits into a SysML-free core and a SysML boundary; ModelSpec and BuildConfig are the public contract, ModelDefinition stays internal, SysML is parsed once, and each artifact owns one FMI facade.
+
+### Architecture
+
+- **ID-006** — The Reduction is the only SysML hand-off; typed starts on Variable · accepted · 2026-11-20 · `ID-006`
+  SysML is reduced once into a parser-free Reduction that carries typed starts and authored attributes, and the adapter never re-resolves the export unit.

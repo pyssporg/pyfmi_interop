@@ -21,9 +21,9 @@ The Python layer is split at the SysML boundary into `core/` (SysML-free) and
 | `src/pyfmi_interop/core/builder.py` | Configures and runs the CMake build. |
 | `src/pyfmi_interop/core/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
 | `src/pyfmi_interop/core/pipeline.py` | `Compilation` and `compile_model`: generate, build, package in one call. |
-| `src/pyfmi_interop/sysml/parse.py` | One parse through `pycps_sysml2` / `pyfmi_sysml2`; returns `ParsedModel(spec, architecture, unit, composition)`. |
+| `src/pyfmi_interop/sysml/parse.py` | One parse through `pycps_sysml2`, one reduction through `pyfmi_sysml2`; returns the parser-free `ParsedModel(spec, reduction, unit)`. |
 | `src/pyfmi_interop/sysml/generate.py` | `generate_adapter(parsed, out_dir, config)`; never reloads the source. |
-| `src/pyfmi_interop/sysml/adapter.py` | The `pyfmi_sysml2` FMI layer for the adapter artifact. |
+| `src/pyfmi_interop/sysml/adapter.py` | `adapter_from_reduction(reduction, model, ...)`: the `pyfmi_sysml2` FMI layer for the adapter artifact. |
 | `src/pyfmi_interop/sysml/definitions/` | The bundled `PyfmiInterop` SysML vocabulary. |
 | `src/pyfmi_interop/cli.py` | The `pyfmi-interop` command surface. |
 
@@ -39,9 +39,10 @@ extra roots to the single load. Export selection stays leaf-only among
 file that only imports a library exports the library's leaf under its bare
 name.
 
-SysML is parsed exactly once: `parse` returns the specification and the opaque
-`pycps_sysml2` architecture together, and `generate_adapter` consumes that
-`ParsedModel` rather than reloading the file.
+SysML is parsed exactly once: `parse` loads the architecture, reduces it once,
+and returns the specification and the parser-free `Reduction` together;
+`generate_adapter` consumes that `ParsedModel` rather than reloading the file
+or re-resolving the export unit.
 
 ### C++ runtime layer
 

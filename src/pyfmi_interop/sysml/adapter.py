@@ -45,7 +45,7 @@ from ..core.wire import model_id
 __all__ = [
     "AdapterModel",
     "AdapterSignal",
-    "adapter_from_architecture",
+    "adapter_from_reduction",
     "adapter_model_json",
     "load_adapter_model",
     "render_adapter_wire_json",
@@ -71,15 +71,8 @@ _DATA_TYPE = {
 
 def _require_pyfmi_sysml2():
     try:
-        import pyfmi_sysml2
         from pyfmi_sysml2.c import generate_c_runtime
         from pyfmi_sysml2.c.headers import header_stem, member_expression
-        from pyfmi_sysml2.core import (
-            architecture,
-            components,
-            export_identity,
-            resolve_system,
-        )
         from pyfmi_sysml2.model_description import generate_model_description
     except ImportError as error:  # pragma: no cover - exercised without the extra
         raise RuntimeError(
@@ -87,14 +80,9 @@ def _require_pyfmi_sysml2():
             '"pyfmi-interop[sysml]"'
         ) from error
     return {
-        "pyfmi_sysml2": pyfmi_sysml2,
         "generate_c_runtime": generate_c_runtime,
         "header_stem": header_stem,
         "member_expression": member_expression,
-        "architecture": architecture,
-        "components": components,
-        "export_identity": export_identity,
-        "resolve_system": resolve_system,
         "generate_model_description": generate_model_description,
     }
 
@@ -149,17 +137,16 @@ class AdapterModel:
         return bool(self.parameters)
 
 
-def adapter_from_architecture(
-    architecture: Any,
+def adapter_from_reduction(
+    reduction: Any,
     model: ModelDefinition,
     *,
     component: str | None = None,
-    composition: str | None = None,
     serialization: str = "protobuf",
     role: str | None = None,
     prefix: str | None = None,
 ) -> AdapterModel:
-    """Join the ``pyfmi_sysml2`` reduction of ``architecture`` with ``model``.
+    """Join a parser-free ``pyfmi_sysml2`` reduction with ``model``.
 
     ``model`` supplies the timing, unit and string-capacity metadata that the
     FMI reduction does not carry.  Its signal names must match the reduction
@@ -167,11 +154,11 @@ def adapter_from_architecture(
     """
 
     helpers = _require_pyfmi_sysml2()
-    system = helpers["resolve_system"](architecture, composition)
-    exported = helpers["components"](architecture, composition=composition)
-    selected = _select_component(exported, component or model.interface)
-    identity = helpers["export_identity"](architecture, system)
-    package = prefix or architecture.package_name
+    selected = _select_component(
+        list(reduction.components), component or model.interface
+    )
+    identity = reduction.identity
+    package = prefix or reduction.package
     stem = helpers["header_stem"](package, selected.name, direct=identity.direct)
 
     if not _is_identifier(selected.name):
@@ -253,7 +240,7 @@ def adapter_from_architecture(
     return AdapterModel(
         identifier=selected.name,
         model_name=identity.model_name(selected.name),
-        guid=_guid(helpers, identity, selected.name),
+        guid=_guid(identity, selected.name),
         stem=stem,
         package=package,
         direct=identity.direct,
@@ -281,12 +268,12 @@ def _select_component(components: list[Any], requested: str | None) -> Any:
         return components[0]
     available = ", ".join(sorted(item.name for item in components))
     raise ValueError(
-        f"the architecture exports {len(components)} components ({available}); "
+        f"the reduction exports {len(components)} components ({available}); "
         "pass component= to select one"
     )
 
 
-def _guid(helpers: dict[str, Any], identity: Any, component: str) -> str:
+def _guid(identity: Any, component: str) -> str:
     from pyfmi_sysml2.core.identity import guid
 
     return guid(identity.guid_key(component))

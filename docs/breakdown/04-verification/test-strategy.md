@@ -34,6 +34,7 @@ cover the command surface.
 The `sysml` marker is declared in `pyproject.toml`. Default gate:
 `python -m pytest -m "not sysml"` plus `ctest` after the native build, on
 Python 3.11 and 3.12; the full suite is `python -m pytest`. The single-parse
-rule is pinned by tests: `parse` produces one `ParsedModel`, and
-`generate_adapter` rejects anything else rather than reloading the source.
+rule is pinned by tests: `parse` calls `to_reduction` once and produces one
+`ParsedModel`, and `generate_adapter` rejects anything else instead of reloading
+the source or re-resolving the export unit.
 Goldens are compared, never regenerated in CI.

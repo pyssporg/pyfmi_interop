@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -493,6 +494,8 @@ def _system_architecture():
 
 
 def _generate_unit(architecture, unit: str, out: Path, *, serialization="packed"):
+    from pyfmi_sysml2.core import to_reduction
+
     from pyfmi_interop.sysml import ParsedModel, model_from_architecture
 
     model = model_from_architecture(
@@ -503,9 +506,8 @@ def _generate_unit(architecture, unit: str, out: Path, *, serialization="packed"
     )
     parsed = ParsedModel(
         spec=model,
-        architecture=architecture,
+        reduction=to_reduction(architecture, composition=unit),
         unit=unit,
-        composition=unit,
     )
     target = _generate(parsed, out, serialization=serialization)
     return model, target
@@ -596,3 +598,73 @@ def test_generate_all_units_writes_one_model_per_unit(tmp_path):
 
     assert destinations == _SYSTEM_UNITS
     assert sorted(path.name for path in tmp_path.iterdir()) == _SYSTEM_UNITS
+
+
+def test_generate_adapter_never_re_resolves_the_export_unit(
+    example, tmp_path, monkeypatch
+):
+    import pyfmi_sysml2.core as upstream
+
+    def fail(*args, **kwargs):
+        raise AssertionError("the adapter re-resolved the export unit")
+
+    monkeypatch.setattr(upstream, "resolve_system", fail)
+    monkeypatch.setattr(upstream, "components", fail)
+
+    target = _generate(example, tmp_path / "reduced")
+    payload = load_adapter_model(target)
+
+    assert payload["model_name"] == "ActuatorLink"
+    assert (target / "ActuatorLink" / "modelDescription.xml").is_file()
+
+
+def test_authored_parameter_and_neutral_input_starts_survive_the_handoff(tmp_path):
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    from test_parameters import _FIXTURE
+
+    from pyfmi_interop.sysml import parse
+    from pyfmi_interop.sysml.adapter import adapter_from_reduction
+
+    source = tmp_path / "parameter_exchange.sysml"
+    source.write_text(_FIXTURE, encoding="utf-8")
+    config = BuildConfig(serialization="packed")
+
+    parsed = parse(source, name="ParameterExchange")
+    spec = {signal.name: signal for signal in parsed.spec.signals}
+    assert spec["transport"].initial == "loopback"
+    assert spec["bind_address"].initial == "127.0.0.1:0"
+    assert spec["peer_address"].initial == ""
+    assert spec["queue_depth"].initial == 8
+    assert isinstance(spec["queue_depth"].initial, int)
+    assert spec["command.demand"].initial == 0.0
+    assert isinstance(spec["command.demand"].initial, float)
+
+    adapter = adapter_from_reduction(
+        parsed.reduction,
+        parsed.spec.to_model(config),
+        component=parsed.unit,
+        serialization=config.serialization,
+    )
+    signals = {signal.name: signal for signal in adapter.signals}
+    assert signals["transport"].initial == "loopback"
+    assert signals["bind_address"].initial == "127.0.0.1:0"
+    assert signals["peer_address"].initial == ""
+    assert signals["queue_depth"].initial == 8
+    assert isinstance(signals["queue_depth"].initial, int)
+    assert signals["command.demand"].initial == 0.0
+    assert isinstance(signals["command.demand"].initial, float)
+
+    from pyfmi_interop.sysml import generate_adapter
+
+    target = generate_adapter(parsed, tmp_path / "adapter", config)
+    description = next(target.glob("*/modelDescription.xml"))
+    starts = {
+        variable.attrib["name"]: next(iter(variable)).attrib.get("start")
+        for variable in ET.parse(description).getroot().iter("ScalarVariable")
+    }
+    assert starts["transport"] == "loopback"
+    assert starts["bind_address"] == "127.0.0.1:0"
+    assert starts["queue_depth"] == "8"
+    assert starts["command.demand"] == "0"
+

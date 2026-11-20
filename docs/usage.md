@@ -79,8 +79,10 @@ result = compile_model(spec, "build/demo",
                        config=BuildConfig(serialization="packed"))
 ```
 
-SysML is parsed once. `parse(source)` returns a `ParsedModel`; pass that handle
-to `generate_adapter`, which never reloads the source:
+SysML is parsed once. `parse(source)` returns a `ParsedModel` carrying the
+specification and a parser-free `Reduction`; pass that handle to
+`generate_adapter`, which never reloads the source or re-resolves the export
+unit:
 
 ```python
 from pyfmi_interop.sysml import generate_adapter, parse

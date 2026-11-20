@@ -15,7 +15,7 @@ from .adapter import (
     _require_pyfmi_sysml2,
     _strip_default_experiment,
     _write,
-    adapter_from_architecture,
+    adapter_from_reduction,
     adapter_model_json,
     render_adapter_cmake,
     render_adapter_hooks,
@@ -33,7 +33,7 @@ def generate_adapter(
 ) -> Path:
     """Write the adapter source tree from an already parsed model.
 
-    The source is never reloaded: every fact comes from ``parsed.architecture``
+    The source is never reloaded: every fact comes from ``parsed.reduction``
     and ``parsed.spec``.  ``config`` supplies the serialization backend, role
     and adapter prefix.
     """
@@ -45,11 +45,10 @@ def generate_adapter(
         )
     options = config or BuildConfig()
     model = parsed.spec.to_model(options)
-    adapter = adapter_from_architecture(
-        parsed.architecture,
+    adapter = adapter_from_reduction(
+        parsed.reduction,
         model,
         component=parsed.unit,
-        composition=parsed.composition,
         serialization=options.serialization,
         role=options.role,
         prefix=options.prefix,
@@ -60,16 +59,14 @@ def generate_adapter(
     target.mkdir(parents=True, exist_ok=True)
 
     helpers["generate_c_runtime"](
-        parsed.architecture,
+        parsed.reduction,
         target,
-        composition=parsed.composition,
         component=adapter.identifier,
         prefix=options.prefix,
     )
     helpers["generate_model_description"](
-        parsed.architecture,
+        parsed.reduction,
         target,
-        composition=parsed.composition,
         component=adapter.identifier,
         generation_time=None,
     )

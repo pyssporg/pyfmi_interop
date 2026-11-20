@@ -42,9 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths (`pyfmi_interop.ir`, `.wire`, `.serialization`, `.codegen`, `.builder`,
   `.packaging`, `.schema`, `.native`, `.roles`, `.timing`, `.psysml2`,
   `.definitions`) remain as re-export-only compatibility facades.
-- SysML is parsed once: `parse` returns `ParsedModel(spec, architecture, unit,
-  composition)`, and `generate_adapter` consumes that handle instead of
-  reloading the source.
+- SysML is parsed once: `parse` loads the architecture, calls `to_reduction`
+  once, and returns the parser-free `ParsedModel(spec, reduction, unit)`.
+  `generate_adapter` and `adapter_from_reduction` consume that handle instead
+  of reloading the source or re-resolving the export unit, and `Variable.start`
+  restores authored parameter defaults while inputs carry the neutral start.
+- The `sysml` extra pins `pyfmi-sysml2` v0.4.0 for the parser-free `Reduction`
+  API; `pycps-sysml2` stays at v0.3.0.
 - One FMI facade per artifact: the core emits the interop facade, and the
   adapter takes its FMI interface, headers, and model description from
   `pyfmi_sysml2`. Both export the same `fmi2*` ABI but never share a binary;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -182,3 +183,71 @@ def test_model_from_architecture_honours_explicit_step_size_and_name() -> None:
     assert model.name == "Renamed"
     assert model.step_size_s == pytest.approx(0.02)
     assert model.realtime is False
+
+
+def test_parse_reduces_once_and_loads_the_source_once(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    import pycps_sysml2
+    import pyfmi_sysml2.core as upstream
+    from test_parameters import _FIXTURE
+
+    source = tmp_path / "deployment.sysml"
+    source.write_text(_FIXTURE, encoding="utf-8")
+
+    loads = []
+    real_load = pycps_sysml2.load
+
+    def counting_load(*args, **kwargs):
+        loads.append(args)
+        return real_load(*args, **kwargs)
+
+    reductions = []
+    real_reduction = upstream.to_reduction
+
+    def counting_reduction(*args, **kwargs):
+        reductions.append(args)
+        return real_reduction(*args, **kwargs)
+
+    monkeypatch.setattr(pycps_sysml2, "load", counting_load)
+    monkeypatch.setattr(upstream, "to_reduction", counting_reduction)
+
+    parsed = sysml.parse(source)
+
+    assert parsed.unit == "Exchange"
+    assert len(loads) == 1
+    assert len(reductions) == 1
+
+
+def test_parsed_model_carries_the_selected_unit_and_the_upstream_reduction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    import pyfmi_sysml2.core as upstream
+    from pyfmi_sysml2.core import Reduction
+
+    reductions = []
+    real_reduction = upstream.to_reduction
+
+    def counting_reduction(*args, **kwargs):
+        reductions.append(args)
+        return real_reduction(*args, **kwargs)
+
+    monkeypatch.setattr(upstream, "to_reduction", counting_reduction)
+
+    example = (
+        Path(__file__).resolve().parents[2]
+        / "examples"
+        / "sysml"
+        / "adapter"
+        / "actuator_link.sysml"
+    )
+    parsed = sysml.parse(example, name="ActuatorLinkAdapter", realtime=False)
+
+    assert len(reductions) == 1
+    assert parsed.unit == "ActuatorLink"
+    assert isinstance(parsed.reduction, Reduction)
+    assert parsed.reduction.root == "ActuatorLink"

@@ -38,8 +38,9 @@ CoSimulation FMU.
   (`parse`, `generate_adapter`, the `pyfmi_sysml2` FMI layer, definitions). It
   ingests SysML or IR JSON, emits C++, CMake, the wire schema, and the adapter
   model, builds the native model, and packages the FMU.
-- SysML is parsed once: `parse` returns a `ParsedModel`, and
-  `generate_adapter` consumes that handle without reloading the source.
+- SysML is parsed once: `parse` returns a `ParsedModel` carrying a parser-free
+  `Reduction`, and `generate_adapter` consumes that handle without reloading the
+  source or re-resolving the export unit.
 - The C++ layer in `src/runtime/` owns the reusable `ModelRuntime` interface,
   the fixed-step scheduler, the wire codec, the serialization backends, and the
   `Transport` registry; the UDP and TCP backends live in `src/transport/`.
@@ -70,8 +71,9 @@ CoSimulation FMU.
   vectors; no protocol-specific branch grows elsewhere.
 - **One parse, one facade per artifact.** SysML is parsed once and
   `generate_adapter` consumes the resulting `ParsedModel`; it never reloads the
-  source. Each artifact owns one FMI facade — the core its interop facade, the
-  adapter the `pyfmi_sysml2` generator's — and they never share a binary.
+  source or re-resolves the export unit. Each artifact owns one FMI facade — the
+  core its interop facade, the adapter the `pyfmi_sysml2` generator's — and they
+  never share a binary.
 - **Two registered seams.** Serialization is chosen when the adapter is
   generated, one emitter per backend; transports are chosen at run time by
   name — loopback, UDP, TCP. A name resolves to one backend, an unknown or

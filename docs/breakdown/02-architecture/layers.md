@@ -22,9 +22,10 @@ the IR and the `ModelRuntime` interface.
   ParsedModel`, `load_model`, `load_architecture`, `model_from_architecture`),
   `generate.py` (`generate_adapter`), `adapter.py` (the `pyfmi_sysml2` FMI
   layer), and `definitions/` (the bundled `interop.sysml`).
-- **One parse:** `parse` resolves the export unit once and returns
-  `ParsedModel(spec, architecture, unit, composition)`; `generate_adapter`
-  consumes it and never reloads the source.
+- **One parse:** `parse` loads the architecture once, calls `to_reduction`
+  once, and returns `ParsedModel(spec, reduction, unit)`; `generate_adapter`
+  consumes that parser-free handle and never reloads the source or re-resolves
+  the export unit.
 - **Compatibility facades:** `.ir`, `.wire`, `.serialization`, `.codegen`,
   `.builder`, `.packaging`, `.schema`, `.native`, `.roles`, `.timing`,
   `.psysml2`, and `.definitions` keep the old import paths as re-exports only.
@@ -42,13 +43,12 @@ the IR and the `ModelRuntime` interface.
   takes its interface, headers, and model description from `pyfmi_sysml2` and
   links the runtime without whole-archive. Both export the same `fmi2*` ABI,
   so they never share a binary.
-- **Ingestion:** `sysml/parse.py` uses `pycps_sysml2` and `pyfmi_sysml2`; the
-  IR stays independent of both and of FMI. A model opts into the bundled
-  `PyfmiInterop` vocabulary with `private import PyfmiInterop::*;`;
-  `interop_definitions()` returns its path, and `load_with_interop` adds it to
-  the roots only for that declaration. `InteropMetadata` is String-only, does
-  not inherit `FmuMetadata`, and no generator consumes it yet, so it changes
-  neither `modelDescription.xml` nor the wire.
+- **Ingestion:** `sysml/parse.py` loads through `pycps_sysml2` and reduces once
+  through `pyfmi_sysml2`; every generator reads the parser-free `Reduction`.
+  `PyfmiInterop::*` opts a model into the bundled vocabulary;
+  `load_with_interop` adds its roots only for that import. `InteropMetadata` is
+  String-only, inherits no `FmuMetadata`, and no generator consumes it, so it
+  changes neither `modelDescription.xml` nor the wire.
 - **Export selection:** leaf-only among `:> FmuModel` candidates; a shared base
   such as `FmuInterop :> FmuModel` is a role, imported definitions are
   selectable, and a direct FMU is packaged under its bare name.

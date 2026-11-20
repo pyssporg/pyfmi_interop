@@ -71,11 +71,12 @@ def build_unit(
         name=unit,
         realtime=False,
     )
+    from pyfmi_sysml2.core import to_reduction
+
     parsed = ParsedModel(
         spec=model,
-        architecture=architecture,
+        reduction=to_reduction(architecture, composition=unit),
         unit=unit,
-        composition=unit,
     )
     generate_adapter(
         parsed,
