@@ -38,8 +38,8 @@ dependencies = []
 # tested without the SysML dialect packages.  Inside the pyssp workspace they
 # are installed editable from the checkout, which shadows these release pins.
 sysml = [
-  "pycps-sysml2 @ https://github.com/pyssporg/pycps_sysml2/releases/download/v0.2.0/pycps_sysml2-0.2.0-py3-none-any.whl",
-  "pyfmi-sysml2 @ https://github.com/pyssporg/pyfmi_sysml2/releases/download/v0.2.0/pyfmi_sysml2-0.2.0-py3-none-any.whl",
+  "pycps-sysml2 @ https://github.com/pyssporg/pycps_sysml2/releases/download/v0.3.0/pycps_sysml2-0.3.0-py3-none-any.whl",
+  "pyfmi-sysml2 @ https://github.com/pyssporg/pyfmi_sysml2/releases/download/v0.3.0/pyfmi_sysml2-0.3.0-py3-none-any.whl",
 ]
 dev = [
   "pytest>=8",
