@@ -7,14 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-20
+
+### Breaking
+
+- `model_id` uses the `pyfmi_interop.model-id.v2` hash domain: the digest is the
+  model name plus the wire signals ordered by `(value_reference, name)`, with no
+  step size and no parameters. Timing and deployment configuration no longer
+  move the identity, and peers built against v1 identities must be rebuilt.
+
 ### Added
 
+- Adapter generation on the `pyfmi_sysml2` FMI layer: `generate_model` accepts
+  `fmi_layer="psysml2"` with `sysml_source=`, and the new
+  `pyfmi_interop.psysml2` module takes the FMI 2.0 C interface, headers, and
+  `modelDescription.xml` from the shared SysML-to-FMI generator while this
+  repository supplies the five model hooks and owns the wire plane. The
+  default `interop` layer still renders its own facade.
+- Deployment parameters as FMI variables (`causality="parameter"`,
+  `variability="fixed"`) with authored defaults, bound by the master before
+  `fmi2EnterInitializationMode`; the transport is opened there from
+  `transport`, `bind_address`, `peer_address`, `queue_depth`, and `deadline_s`,
+  per instance. An unknown transport value fails initialization with the
+  accepted values, a write after initialization is rejected, and the
+  `PYFMI_INTEROP_TRANSPORT*` environment variables remain only as a fallback
+  for a model that declares no parameter interface.
+- `package_fmu` accepts `model_description`, `model_json`, `model_name`,
+  `extra_entries`, and `include_schema`, so an external FMI generator can inject
+  its document and schemas while the packager still fixes archive layout,
+  timestamps, and order.
 - `Serialization` backends may supply their own payload identity
   (`payload_message`, `proto_package`), an external proto tree, and the CMake
   additions their target needs (`cmake_proto_sources`,
   `cmake_proto_import_roots`, `cmake_include_dirs`, `cmake_link_libraries`).
   Codegen accepts any registered backend name; `packed` and `protobuf` still
   generate byte-identical output.
+
+### Changed
+
+- FMI value references and wire field numbers are separate namespaces: FMI
+  value references are zero-based in declaration order, parameters included,
+  while wire fields are `1..n` over inputs and outputs in canonical signal-name
+  order. Adding a parameter no longer renumbers the wire.
+- Adapters are step-free: `ModelDefinition.step_size_s` is optional and an
+  adapter validates its declared rates against the slowest one. Step size
+  leaves the wire identity, the model description (`DefaultExperiment` is
+  emitted only for realtime models), and the build inputs; parameters change
+  from `variability="tunable"` to `"fixed"`.
+- Timing and transport metadata are ordinary typed attributes; the retired
+  `pyssp_*` control spelling is no longer read. On a port definition the
+  attribute must be typed by a dialect container marker such as an
+  `attribute def` specializing `ParameterSet` so the FMI reduction skips it,
+  while on a part definition any resolved `attribute def` suffices.
+- `pycps-sysml2` and `pyfmi-sysml2` in the `sysml` extra pin the v0.3.0 wheels.
+- Canonical wire order is now stated as signal-name order: ports may be
+  reordered in SysML without renumbering the wire, and an SSP connector binds
+  variable names, not value references. The assignment already sorted by name;
+  the architecture and intent text said `component_interface` order.
 
 ### Fixed
 
