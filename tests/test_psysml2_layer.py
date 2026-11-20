@@ -221,14 +221,19 @@ def test_adapter_model_id_ignores_step_size_and_declared_rates(tmp_path):
     _, base = _generate_variant(tmp_path, "base", original)
 
     stepped_text = original.replace(
+        "  port def Command {",
+        "  attribute def BuildTiming;\n\n"
+        "  port def Command {",
+    ).replace(
         "  part def ActuatorLink {",
         "  part def ActuatorLink {\n"
-        "    attribute pyssp_step_size : Real = 0.002;",
+        "    attribute step_size_s : BuildTiming = 0.002;",
     )
     rated_text = original.replace(
         "  port def Command {",
+        "  attribute def PortTiming :> ParameterSet;\n\n"
         "  port def Command {\n"
-        "    attribute pyssp_rate : Real = 250.0;",
+        "    attribute rate : PortTiming = 250.0;",
     )
     assert stepped_text != original and rated_text != original
 
@@ -244,9 +249,12 @@ def test_adapter_document_has_no_default_experiment(tmp_path):
     original = _EXAMPLE.read_text(encoding="utf-8")
     text = original.replace(
         "  part def Root {",
+        "  attribute def AdapterDefaults :> DefaultExperiment {\n"
+        "    attribute startTime = 0.0;\n"
+        "    attribute stopTime = 1.0;\n"
+        "  }\n\n"
         "  part def Root {\n"
-        "    attribute pyssp_default_start_time : Real = 0.0;\n"
-        "    attribute pyssp_default_stop_time : Real = 1.0;",
+        "    attribute defaults : AdapterDefaults;",
     )
     assert text != original
 
@@ -261,12 +269,13 @@ def test_adapter_rejects_a_rate_that_is_not_a_multiple_of_the_slowest(tmp_path):
     original = _EXAMPLE.read_text(encoding="utf-8")
     text = original.replace(
         "  port def Command {",
+        "  attribute def PortTiming :> ParameterSet;\n\n"
         "  port def Command {\n"
-        "    attribute pyssp_rate : Real = 250.0;",
+        "    attribute rate : PortTiming = 250.0;",
     ).replace(
         "  port def Feedback {",
         "  port def Feedback {\n"
-        "    attribute pyssp_rate : Real = 100.0;",
+        "    attribute rate : PortTiming = 100.0;",
     )
     assert text != original
 

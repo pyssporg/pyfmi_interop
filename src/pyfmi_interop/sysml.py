@@ -26,11 +26,12 @@ step size is taken from the system, then a component, then a port; a signal
 takes its rate from the merged component/port attributes, so a port overrides
 its component.
 
-Every key also accepts the ``pyssp_*`` control spelling (``pyssp_rate``,
-``pyssp_transport``, ...).  The prefixed form is the safe place to author
-metadata on a part definition, because ``pyfmi_sysml2`` rejects bare flat
-attributes as retired parameters, and on a port definition it also keeps the
-attribute out of the FMI variable set.
+Timing and transport metadata are ordinary typed attributes.  On a port
+definition the attribute must be typed by a dialect container marker (for
+example an ``attribute def`` specializing ``ParameterSet``) so the FMI
+reduction skips it instead of turning it into a signal field.  On a part
+definition any resolved ``attribute def`` is enough; a flat untyped attribute
+is rejected by the parameter dialect.
 
 Transport attributes are not interpreted: the repository carries bytes, not
 protocol bindings, so ``transport``, ``channel``, and ``transport_endpoint``
@@ -83,13 +84,6 @@ _CAUSALITIES = {
 _STEP_KEYS = ("step_size_s", "step_size")
 _PERIOD_KEYS = ("period_s", "period")
 _RATE_KEYS = ("rate_hz", "rate")
-
-#: ``pycps_sysml2`` ships ``pyssp_*`` attributes as control metadata: the FMI
-#: reduction skips them, so they can carry timing and transport without becoming
-#: model variables.  The bare key is still accepted for architectures that
-#: author it on a scope the parameter dialect does not validate.
-_CONTROL_PREFIX = "pyssp_"
-
 
 def load_model(
     source: str | Path,
@@ -240,13 +234,9 @@ def _variable_attributes(
 
 
 def _attribute_value(attributes: Mapping[str, object], name: str) -> object | None:
-    """Raw value of ``name``; list-valued attributes keep their first element.
+    """Raw value of ``name``; list-valued attributes keep their first element."""
 
-    The ``pyssp_*`` control spelling wins over the bare key when both exist.
-    """
-
-    names = (f"{_CONTROL_PREFIX}{name}", name)
-    raw = next((attributes[key] for key in names if key in attributes), None)
+    raw = attributes.get(name)
     if raw is None:
         return None
     value = getattr(raw, "value", raw)

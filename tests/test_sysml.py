@@ -25,10 +25,6 @@ def test_step_size_attributes_and_explicit_override() -> None:
     assert sysml._step_size_from_attributes({"period_s": 0.005}, None) == 0.005
     assert sysml._step_size_from_attributes({"rate_hz": 2000}, None) == 0.0005
     assert sysml._step_size_from_attributes({"rate": 1000}, None) == 0.001
-    assert sysml._step_size_from_attributes({"pyssp_rate": 1000}, None) == 0.001
-    assert sysml._step_size_from_attributes(
-        {"pyssp_step_size": 0.25, "step_size": 0.5}, None
-    ) == 0.25
     assert sysml._step_size_from_attributes({"step_size": 0.1}, 0.02) == 0.02
 
 
@@ -102,27 +98,38 @@ def _architecture() -> object:
     except Exception as error:  # noqa: BLE001 - broken optional dependency
         pytest.skip(f"pyfmi_sysml2 is not importable: {error}")
 
+    # A typed container marker keeps author metadata out of the FMI variable
+    # set, the 0.3.0 replacement for the retired ``pyssp_*`` names.
+    metadata = pycps.AttributeDefinition(
+        name="TelemetryMetadata", specializes=("ParameterSet",)
+    )
     telemetry = pycps.PortDefinition(
         name="Telemetry",
         attributes={
             "value": pycps.Attribute(name="value", type_name="Real"),
             "label": pycps.Attribute(name="label", type_name="String"),
-            "pyssp_unit": pycps.Attribute(
-                name="pyssp_unit", type_name="String", value="V"
+            "unit": pycps.Attribute(
+                name="unit", type_name="TelemetryMetadata", value="V"
             ),
-            "pyssp_rate": pycps.Attribute(name="pyssp_rate", value=10.0),
-            "pyssp_step_size_s": pycps.Attribute(
-                name="pyssp_step_size_s", value=0.01
+            "rate": pycps.Attribute(
+                name="rate", type_name="TelemetryMetadata", value=10.0
             ),
-            "pyssp_transport": pycps.Attribute(
-                name="pyssp_transport", type_name="String", value="loopback"
+            "step_size_s": pycps.Attribute(
+                name="step_size_s", type_name="TelemetryMetadata", value=0.01
             ),
-            "pyssp_channel": pycps.Attribute(
-                name="pyssp_channel", type_name="String", value="telemetry"
+            "transport": pycps.Attribute(
+                name="transport",
+                type_name="TelemetryMetadata",
+                value="loopback",
             ),
-            "pyssp_transport_endpoint": pycps.Attribute(
-                name="pyssp_transport_endpoint",
-                type_name="String",
+            "channel": pycps.Attribute(
+                name="channel",
+                type_name="TelemetryMetadata",
+                value="telemetry",
+            ),
+            "transport_endpoint": pycps.Attribute(
+                name="transport_endpoint",
+                type_name="TelemetryMetadata",
                 value="udp://239.0.0.1:5000",
             ),
         },
@@ -140,6 +147,7 @@ def _architecture() -> object:
     architecture.add_part_def(root)
     architecture.add_part_def(plant)
     architecture.add_port_def(telemetry)
+    architecture.add_attribute_def(metadata)
     return architecture
 
 
