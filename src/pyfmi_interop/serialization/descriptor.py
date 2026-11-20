@@ -16,10 +16,10 @@ from ..roles import derive_role
 from ..wire import model_id
 from .naming import (
     field_identifiers,
-    message_identifier,
     wire_direction,
     wire_signals,
 )
+from .registry import get as get_serialization
 
 __all__ = [
     "SCHEMA_FORMAT_VERSION",
@@ -44,6 +44,7 @@ def render_wire_json(
     """Return the deterministic JSON descriptor for ``model``."""
 
     _check_signals(model)
+    backend = get_serialization(serialization)
     fields = field_identifiers(model)
     signals = wire_signals(model)
     interface = model.interface or model.name
@@ -56,10 +57,8 @@ def render_wire_json(
         "interface": interface,
         "model": model.name,
         "model_id": model_id(model).hex(),
-        "payload_message": message_identifier(interface),
-        "proto_package": (
-            "pyfmi_interop.wire" if serialization == "protobuf" else None
-        ),
+        "payload_message": backend.payload_message(model),
+        "proto_package": backend.proto_package(model),
         "rate_groups": [
             {
                 "name": group.name,

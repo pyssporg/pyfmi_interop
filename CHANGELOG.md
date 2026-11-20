@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `Serialization` backends may supply their own payload identity
+  (`payload_message`, `proto_package`), an external proto tree, and the CMake
+  additions their target needs (`cmake_proto_sources`,
+  `cmake_proto_import_roots`, `cmake_include_dirs`, `cmake_link_libraries`).
+  Codegen accepts any registered backend name; `packed` and `protobuf` still
+  generate byte-identical output.
+
+### Fixed
+
+- `pyfmi_interop_wire_add_proto` compiled an imported proto at its basename, so
+  a proto under a nested directory emitted headers at the wrong path, and the
+  consumer target carried no compile-order edge to protoc. An external proto
+  tree now builds in one cold pass.
+
 ## [0.4.0] - 2026-11-19
 
 ### Added

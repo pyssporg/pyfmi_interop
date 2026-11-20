@@ -163,12 +163,19 @@ def _reset_statement(signal: Signal) -> str:
 
 
 def _exposes_codec(model: ModelDefinition) -> bool:
-    """A generated model advertises its codec only when it has a transport role."""
+    """A generated model advertises its codec only when it has a transport role.
 
-    return (
-        model.role not in (None, "none")
-        and model.serialization in {"packed", "protobuf"}
-    )
+    Any backend in the serialization registry may expose a codec; the check
+    consults the registry rather than a fixed set of names.
+    """
+
+    if model.role in (None, "none") or not model.serialization:
+        return False
+    try:
+        get_serialization(model.serialization)
+    except KeyError:
+        return False
+    return True
 
 
 def _render_runtime_hpp(model: ModelDefinition) -> str:
@@ -301,10 +308,20 @@ def _render_runtime_cpp(model: ModelDefinition) -> str:
     wire_definitions = ""
     if _exposes_codec(model):
         role = str(model.role).capitalize()
-        payload_format = {
+        backend = get_serialization(str(model.serialization))
+        payload_format_name = {
             "packed": "Packed",
             "protobuf": "Protobuf",
-        }[str(model.serialization)]
+        }.get(backend.name)
+        if payload_format_name is None:
+            # An out-of-tree backend owns its format id; carry it as the enum's
+            # numeric value so the generated codec still compiles.
+            payload_format = (
+                "static_cast<pyfmi_interop::wire::PayloadFormat>"
+                f"({int(backend.format_id)}u)"
+            )
+        else:
+            payload_format = f"pyfmi_interop::wire::PayloadFormat::{payload_format_name}"
         records = ", ".join(
             f"{{{signal.value_reference}u, {signal.data_type.number}u}}"
             for signal in wire
@@ -317,7 +334,7 @@ def _render_runtime_cpp(model: ModelDefinition) -> str:
             "\n"
             "pyfmi_interop::wire::PayloadFormat "
             "GeneratedWireCodec::payload_format() const {\n"
-            f"    return pyfmi_interop::wire::PayloadFormat::{payload_format};\n"
+            f"    return {payload_format};\n"
             "}\n"
             "\n"
             "bool GeneratedWireCodec::wire_model_id(\n"

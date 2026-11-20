@@ -157,6 +157,15 @@ class ProtobufSerialization(Serialization):
     name = "protobuf"
     format_id = 1
 
+    def payload_message(self, model: ModelDefinition) -> str:
+        return payload_message_name(model)
+
+    def proto_package(self, model: ModelDefinition) -> str | None:
+        return PROTO_PACKAGE
+
+    def cmake_proto_sources(self, model: ModelDefinition) -> tuple[str, ...]:
+        return (proto_filename(model),)
+
     def schema_files(self, model: ModelDefinition) -> dict[str, bytes]:
         return {
             proto_filename(model): render_proto(model).encode("utf-8"),

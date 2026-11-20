@@ -79,40 +79,92 @@ function(pyfmi_interop_configure_wire target)
 endfunction()
 
 # Compile `proto` with protoc into a static target linked into `target`.
-# Call only in protobuf mode.
+# IMPORT_ROOTS lists the additional protoc import roots the proto needs.
+# Call only where libprotobuf and protoc are available; the generator gates
+# the built-in protobuf target on protobuf mode.
 function(pyfmi_interop_wire_add_proto target proto)
-    if(NOT PYFMI_INTEROP_WIRE_MODE STREQUAL "protobuf")
-        message(FATAL_ERROR "pyfmi_interop_wire_add_proto requires protobuf mode")
-    endif()
+    cmake_parse_arguments(PARSE_ARGV 2 _pyfmi_wire "" "" "IMPORT_ROOTS")
     if(NOT Protobuf_FOUND)
-        message(FATAL_ERROR "protobuf mode requires libprotobuf and protoc")
+        message(FATAL_ERROR "pyfmi_interop_wire_add_proto requires libprotobuf and protoc")
     endif()
 
     get_filename_component(_pyfmi_proto "${proto}" ABSOLUTE)
     get_filename_component(_pyfmi_proto_dir "${_pyfmi_proto}" DIRECTORY)
-    get_filename_component(_pyfmi_proto_name "${_pyfmi_proto}" NAME_WE)
     set(_pyfmi_proto_gen "${CMAKE_CURRENT_BINARY_DIR}/proto")
     file(MAKE_DIRECTORY "${_pyfmi_proto_gen}")
 
+    # Declared import roots come first: a proto inside one must keep its
+    # root-relative path, so protoc emits `<relative>.pb.{h,cc}` where the
+    # codec's `#include` expects it.  The proto's own directory is only a
+    # fallback import root, appended last.
+    set(_pyfmi_proto_roots "")
+    foreach(_pyfmi_root IN LISTS _pyfmi_wire_IMPORT_ROOTS)
+        get_filename_component(_pyfmi_root_abs "${_pyfmi_root}" ABSOLUTE)
+        list(APPEND _pyfmi_proto_roots "${_pyfmi_root_abs}")
+    endforeach()
+    list(APPEND _pyfmi_proto_roots "${_pyfmi_proto_dir}")
+    list(REMOVE_DUPLICATES _pyfmi_proto_roots)
+
+    set(_pyfmi_proto_include_args "")
+    foreach(_pyfmi_root IN LISTS _pyfmi_proto_roots)
+        list(APPEND _pyfmi_proto_include_args "-I${_pyfmi_root}")
+    endforeach()
+    set(_pyfmi_proto_rel "")
+    foreach(_pyfmi_root IN LISTS _pyfmi_proto_roots)
+        file(RELATIVE_PATH _pyfmi_rel "${_pyfmi_root}" "${_pyfmi_proto}")
+        if(NOT _pyfmi_rel MATCHES "^\\.\\.")
+            set(_pyfmi_proto_rel "${_pyfmi_rel}")
+            break()
+        endif()
+    endforeach()
+    if(_pyfmi_proto_rel STREQUAL "")
+        get_filename_component(_pyfmi_proto_rel "${_pyfmi_proto}" NAME)
+    endif()
+
+    get_filename_component(_pyfmi_rel_dir "${_pyfmi_proto_rel}" DIRECTORY)
+    get_filename_component(_pyfmi_rel_name "${_pyfmi_proto_rel}" NAME_WE)
+    if(_pyfmi_rel_dir)
+        set(_pyfmi_proto_out "${_pyfmi_proto_gen}/${_pyfmi_rel_dir}")
+    else()
+        set(_pyfmi_proto_out "${_pyfmi_proto_gen}")
+    endif()
+    file(MAKE_DIRECTORY "${_pyfmi_proto_out}")
+
     add_custom_command(
         OUTPUT
-            "${_pyfmi_proto_gen}/${_pyfmi_proto_name}.pb.cc"
-            "${_pyfmi_proto_gen}/${_pyfmi_proto_name}.pb.h"
+            "${_pyfmi_proto_out}/${_pyfmi_rel_name}.pb.cc"
+            "${_pyfmi_proto_out}/${_pyfmi_rel_name}.pb.h"
         COMMAND
             "${Protobuf_PROTOC_EXECUTABLE}"
             "--cpp_out=${_pyfmi_proto_gen}"
-            "-I${_pyfmi_proto_dir}"
+            ${_pyfmi_proto_include_args}
             "${_pyfmi_proto}"
         DEPENDS "${_pyfmi_proto}"
-        COMMENT "protoc ${_pyfmi_proto_name}.proto"
+        COMMENT "protoc ${_pyfmi_rel_name}.proto"
         VERBATIM
     )
 
-    add_library(${target}_proto STATIC "${_pyfmi_proto_gen}/${_pyfmi_proto_name}.pb.cc")
-    target_include_directories(${target}_proto PUBLIC "${_pyfmi_proto_gen}")
-    target_link_libraries(${target}_proto PUBLIC protobuf::libprotobuf)
-    target_compile_features(${target}_proto PUBLIC cxx_std_17)
-    set_target_properties(${target}_proto PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set(_pyfmi_proto_target "${target}_proto")
+    if(TARGET "${_pyfmi_proto_target}")
+        set(_pyfmi_proto_target "${target}_${_pyfmi_rel_name}_proto")
+    endif()
 
-    target_link_libraries(${target} PRIVATE ${target}_proto)
+    add_library(
+        ${_pyfmi_proto_target}
+        STATIC
+        "${_pyfmi_proto_out}/${_pyfmi_rel_name}.pb.cc"
+    )
+    target_include_directories(${_pyfmi_proto_target} PUBLIC "${_pyfmi_proto_gen}")
+    target_link_libraries(${_pyfmi_proto_target} PUBLIC protobuf::libprotobuf)
+    target_compile_features(${_pyfmi_proto_target} PUBLIC cxx_std_17)
+    set_target_properties(
+        ${_pyfmi_proto_target}
+        PROPERTIES POSITION_INDEPENDENT_CODE ON
+    )
+
+    target_link_libraries(${target} PRIVATE ${_pyfmi_proto_target})
+    # Linking orders the link step only; the consumer's own sources still
+    # compile in parallel with the proto target.  Order the whole build so a
+    # cold Ninja pass cannot race the protoc command that produces the header.
+    add_dependencies(${target} ${_pyfmi_proto_target})
 endfunction()

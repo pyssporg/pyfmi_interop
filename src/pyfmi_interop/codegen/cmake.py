@@ -2,27 +2,38 @@
 
 The generated project is deliberately thin: it compiles the generated
 translation units, links the reusable static runtime, and exposes the runtime
-locations as cache variables.  Only the protobuf backend contributes a payload
-translation unit and a compiled schema; packed and opaque trees compile the
-runtime and bindings alone.
+locations as cache variables.  The built-in protobuf backend contributes a
+payload translation unit and a compiled schema; packed and opaque trees compile
+the runtime and bindings alone.  An out-of-tree backend contributes the proto
+sources, import roots, include directories, and link libraries it declares.
 """
 
 from __future__ import annotations
 
 from ..ir import ModelDefinition
 from ..roles import derive_role
-from ..serialization.protobuf import proto_filename
+from ..serialization import get as get_serialization
 
 __all__ = ["render_cmake"]
 
 
 def render_cmake(model: ModelDefinition, serialization: str = "protobuf") -> str:
-    """Return a deterministic ``CMakeLists.txt`` for ``model``."""
+    """Return a deterministic ``CMakeLists.txt`` for ``model``.
+
+    The built-in backends keep their historical text byte for byte.  Any other
+    registered backend contributes the CMake additions it declares: proto
+    sources, proto import roots, include directories, and link libraries.
+    """
 
     role = model.role or derive_role(model)
-    proto_name = proto_filename(model)
+    backend = get_serialization(serialization)
+    proto_sources = tuple(backend.cmake_proto_sources(model))
+    import_roots = tuple(backend.cmake_proto_import_roots(model))
+    include_dirs = tuple(backend.cmake_include_dirs(model))
+    link_libraries = tuple(backend.cmake_link_libraries(model))
     wire_sources = ""
-    if serialization == "protobuf":
+    if backend.name == "protobuf":
+        proto_name = proto_sources[0]
         wire_sources = f"""
 # The protobuf backend compiles its emitted schema and the generated payload
 # mapping, and builds a conformance executable from the same model.
@@ -44,7 +55,7 @@ if(PYFMI_INTEROP_WIRE_MODE STREQUAL "protobuf")
     target_link_libraries(wire_conformance PRIVATE {model.name})
 endif()
 """
-    elif serialization == "packed":
+    elif backend.name == "packed":
         wire_sources = f"""
 # The packed backend compiles its generated codec and a conformance executable;
 # it needs no protobuf schema or library.
@@ -60,11 +71,19 @@ target_include_directories(
 )
 target_link_libraries(wire_conformance PRIVATE {model.name})
 """
+    elif proto_sources or import_roots or include_dirs or link_libraries:
+        wire_sources = _render_declared_wire(
+            model, backend.name, proto_sources, import_roots
+        )
     else:
         wire_sources = f"""
-# The '{serialization}' backend emits no native payload translation unit here;
+# The '{backend.name}' backend emits no native payload translation unit here;
 # this model compiles the runtime ABI and the generated bindings only.
 """
+
+    backend_additions = _render_cmake_additions(
+        model, backend.name, include_dirs, link_libraries
+    )
 
     # A role model opens a transport, so the backends' static initializers must
     # survive the archive link.  A `none` model has no codec and no transport.
@@ -181,7 +200,7 @@ target_include_directories(
     "${{PYFMI_INTEROP_RUNTIME_INCLUDE_DIR}}"
 )
 {transport_include}pyfmi_interop_configure_wire({model.name})
-{wire_sources}
+{backend_additions}{wire_sources}
 # Whole-archive keeps every runtime object, including the FMI facade and the
 # weak default model factory, in the packaged model library.
 if(MSVC)
@@ -215,3 +234,77 @@ set_target_properties(
     POSITION_INDEPENDENT_CODE ON
 )
 """
+
+
+def _quote(value: str) -> str:
+    """Return a quoted CMake argument for ``value``."""
+
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _render_declared_wire(
+    model: ModelDefinition,
+    backend_name: str,
+    proto_sources: tuple[str, ...],
+    import_roots: tuple[str, ...],
+) -> str:
+    """Return the wire block for an out-of-tree backend's declarations."""
+
+    lines = [
+        "",
+        f"# The '{backend_name}' backend supplies its own codec and schema;",
+        "# the additions below come from its declarations.",
+    ]
+    if model.role not in (None, "none"):
+        lines.append(f"target_sources({model.name} PRIVATE model_wire.cpp)")
+    for proto in proto_sources:
+        lines.extend(_render_proto_call(model.name, proto, import_roots))
+    return "\n".join(lines) + "\n"
+
+
+def _render_proto_call(
+    target: str, proto: str, import_roots: tuple[str, ...]
+) -> list[str]:
+    lines = [
+        "pyfmi_interop_wire_add_proto(",
+        f"    {target}",
+        f"    {_quote(proto)}",
+    ]
+    if import_roots:
+        roots = " ".join(_quote(root) for root in import_roots)
+        lines.append(f"    IMPORT_ROOTS {roots}")
+    lines.append(")")
+    return lines
+
+
+def _render_cmake_additions(
+    model: ModelDefinition,
+    backend_name: str,
+    include_dirs: tuple[str, ...],
+    link_libraries: tuple[str, ...],
+) -> str:
+    """Return declared include-dir and link-library blocks, or an empty string."""
+
+    text = ""
+    if include_dirs:
+        entries = "\n".join(f"    {_quote(path)}" for path in include_dirs)
+        text += f"""
+# The '{backend_name}' backend declares additional include directories.
+target_include_directories(
+    {model.name}
+    PRIVATE
+{entries}
+)
+"""
+    if link_libraries:
+        entries = "\n".join(f"    {_quote(path)}" for path in link_libraries)
+        text += f"""
+# The '{backend_name}' backend declares additional link libraries.
+target_link_libraries(
+    {model.name}
+    PRIVATE
+{entries}
+)
+"""
+    return text

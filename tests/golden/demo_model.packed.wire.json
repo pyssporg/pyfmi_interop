@@ -1,0 +1,58 @@
+{
+  "format": "packed",
+  "format_id": 2,
+  "format_version": 1,
+  "guid": "c6bce198-42d9-524f-a49e-bdbba3fc7b6f",
+  "interface": "demo_model",
+  "model": "demo_model",
+  "model_id": "0d82b76145f42ca2",
+  "payload_message": "demo_model",
+  "proto_package": null,
+  "rate_groups": [
+    {
+      "deadline_s": 0.01,
+      "name": "fast",
+      "period_s": 0.02,
+      "signals": [
+        "setpoint"
+      ]
+    }
+  ],
+  "role": "adapter",
+  "signals": [
+    {
+      "capacity": 0,
+      "data_type": "real",
+      "direction": "output",
+      "field": "speed",
+      "id": 1,
+      "name": "speed",
+      "rate_hz": null,
+      "unit": "m/s",
+      "wire": "in"
+    },
+    {
+      "capacity": 16,
+      "data_type": "string",
+      "direction": "output",
+      "field": "label",
+      "id": 2,
+      "name": "label",
+      "rate_hz": null,
+      "unit": null,
+      "wire": "in"
+    },
+    {
+      "capacity": 0,
+      "data_type": "real",
+      "direction": "input",
+      "field": "setpoint",
+      "id": 5,
+      "name": "setpoint",
+      "rate_hz": 50.0,
+      "unit": null,
+      "wire": "out"
+    }
+  ],
+  "step_size_s": 0.01
+}
