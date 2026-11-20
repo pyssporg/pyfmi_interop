@@ -21,7 +21,7 @@ below it knows the model's signals or equations.
 
 ### C++ runtime layer
 
-`runtime/` is a static runtime shared by every generated model:
+`src/runtime/` is a static runtime shared by every generated model:
 
 - `ModelRuntime` — the interface between a generated model and the FMI facade,
   the scheduler, and the transports.
@@ -33,12 +33,14 @@ below it knows the model's signals or equations.
 
 ### Wire layer
 
-`src/pyfmi_interop/wire/` and `runtime/src/wire.cpp` implement the same
+`src/pyfmi_interop/wire/` and `src/runtime/src/wire.cpp` implement the same
 length-delimited, CRC32-checked, version-tagged envelope, the single framing
 authority. Serialization is a registered seam with one schema authority per
-backend: `schema.py` emits the canonical protobuf payload schema and its
-`wire.json` descriptor, and `packed` is the second backend. Wire version 2
-carries `payload_format` in the envelope, so one framing layer serves both.
+backend: `serialization/protobuf.py` emits the canonical protobuf payload
+schema, `serialization/descriptor.py` emits the shared `wire.json`, and
+`packed` is the second backend; `schema.py` remains a backwards-compatible
+facade. Wire version 2 carries `payload_format` in the envelope, so one framing
+layer serves every backend.
 Discovery, medium, and protocol semantics are outside this repository.
 
 ### Generated model layer
@@ -58,9 +60,10 @@ corresponding wire direction, but carries no `user_step` and no equations.
 ### Wheel layer
 
 The platform wheel (tag `py3-none-<platform>`) carries
-`_runtime/libpyfmi_interop_runtime.a` plus the public headers under
-`_runtime/include/pyfmi_interop/runtime/`. The wheel is not pure Python:
-the native runtime must be built with CMake before `python -m build`.
+`_runtime/libpyfmi_interop_runtime.a`, `_runtime/libpyfmi_interop_transport.a`,
+the runtime and transport headers under `_runtime/include/`, and the shared
+CMake module `_runtime/cmake/wire.cmake`. The wheel is not pure Python:
+both native archives must be built with CMake before `python -m build`.
 
 ## Data flow
 
@@ -91,14 +94,15 @@ ModelDefinition IR ─► serializer ─► framing ─► transport
 
 - **Serializer — compile-time lifetime.** The backend is chosen when the
   adapter is generated and compiled into it, one schema authority per backend:
-  protobuf canonical, `packed` second. This is the dependency boundary.
+  protobuf canonical, `packed` second, `opaque` for caller bytes. This is the
+  dependency boundary.
 - **Framing — one authority.** Every backend shares the length-delimited,
   CRC32-checked, version-tagged envelope; wire version 2 adds `payload_format`
   to it. Field numbers are append-only and the reserved range stays reserved.
 - **Transport — run-time lifetime.** Loopback, UDP, and TCP are registered by
   name and resolved when the adapter runs. This is the deployment boundary:
-  endpoints come from the environment or a manifest, never SSD/SSP content, so
-  an SSP stays portable.
+  endpoints are instance parameters, never SSD/SSP content, so an SSP stays
+  portable.
 
 One message carries the whole part definition: every input and output signal
 field of every port, numbered `1..n` in the canonical signal-name order, with
@@ -144,9 +148,10 @@ Direction follows FMI causality:
 The repository defines the wire frame, not a protocol. Byte transports
 (`loopback`, `udp`, `tcp`) carry the frame; this tree ships the `Transport`
 interface and those registered backends, and no protocol binding. A transport
-is selected at run time by name and reports availability from `available()`; an
-unknown name or unavailable backend surfaces an error rather than substituting
-another transport. Endpoints are deployment data — environment or manifest —
+is selected at run time from the URI scheme by `make_transport()`; an unknown
+scheme throws `TransportError` listing the registered names rather than
+substituting another transport. Endpoints are deployment data resolved from
+the instance's parameter interface (the environment is only a fallback) —
 never SSD/SSP content, so a packaged SSP stays portable.
 
 ## Generated versus runtime boundary

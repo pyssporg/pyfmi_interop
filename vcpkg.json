@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "pyfmi-interop",
-  "version-string": "0.3.0",
+  "version-string": "0.5.0",
   "description": "Realtime FMI runtime and one versioned wire format generated from SysML v2.",
   "homepage": "https://github.com/pyssporg/pyfmi_interop",
   "license": "MIT",

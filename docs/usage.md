@@ -19,8 +19,9 @@ pip install -e ".[dev]"
 
 A wheel install replaces the editable step with
 `pip install pyfmi_interop-<version>-py3-none-<platform>.whl`. The wheel
-carries the prebuilt static runtime and public headers; it cannot be built
-without the native runtime in `build/runtime/`.
+carries the prebuilt static runtime and transport archives plus the public
+headers and `wire.cmake`; it cannot be built without the native archives in
+`build/runtime/`.
 
 SysML ingestion needs the optional dialect packages:
 
@@ -41,26 +42,31 @@ packages.
   `pycps_sysml2` / `pyfmi_sysml2`. `--step-size` sets the base step for the
   generated IR, and `--name` overrides the model name.
 - **IR JSON** — canonical `ModelDefinition` JSON, as written by `ir.py` and
-  shown in `examples/loopback/model.json`. It carries the same fields the
-  generator consumes after ingestion, so it is the direct path for tests and
-  for tools that build the IR themselves.
+  emitted as `<out>/model.json` next to every generated model. It carries the
+  same fields the generator consumes after ingestion, so it is the direct path
+  for tests and for tools that build the IR themselves.
 
-A checked-in SysML example that drives the same pipeline through the Python API
-(load, generate, build, package) is `examples/adapter/`; see its README.
+The checked-in SysML example that drives the same pipeline through the Python
+API (load, generate, build, package) is `examples/adapter/`; see its README.
 
-Run `inspect` first to validate the IR and see the resolved signal table
-without emitting anything:
+`inspect` and `schema` take IR JSON only. Generate writes the IR to
+`<out>/model.json`; inspect that file to validate the model and see the
+resolved signal table:
 
 ```bash
-pyfmi-interop inspect --model-json examples/loopback/model.json
+pyfmi-interop inspect --model-json build/actuator_link/model.json
 ```
 
 ## Generate
 
 ```bash
-pyfmi-interop generate --model-json examples/loopback/model.json \
-  --out build/loopback
+pyfmi-interop generate --sysml examples/adapter/actuator_link.sysml \
+  --name ActuatorLink --out build/actuator_link
 ```
+
+The CLI emits the realtime model. The checked-in adapter example loads the same
+SysML with `realtime=False` and packages the adapter `.fmu` instead; see
+`examples/adapter/README.md`.
 
 Generation emits a small C++17 project: `model_runtime.hpp`,
 `model_runtime.cpp`, `model_impl.hpp`, `bindings.cpp`, `model.json`, and
@@ -102,30 +108,38 @@ the IR or a generator template and regenerate rather than hand-editing it.
 ## Build
 
 ```bash
-pyfmi-interop build build/loopback
+pyfmi-interop build build/actuator_link
 ```
 
 The build configures the per-model `CMakeLists.txt` in
-`build/loopback/build/` and links the generated source against the static
+`build/actuator_link/build/` and links the generated source against the static
 runtime. The wire payload mode is selected the same way as the runtime build:
 
 ```bash
-cmake -S build/loopback -B build/loopback/out \
+cmake -S build/actuator_link -B build/actuator_link/out \
   -DPYFMI_INTEROP_WIRE=protobuf \
-  -DPYFMI_INTEROP_RUNTIME_INCLUDE_DIR=runtime/include \
-  -DPYFMI_INTEROP_RUNTIME_LIBRARY=build/runtime/libpyfmi_interop_runtime.a
-cmake --build build/loopback/out
+  -DPYFMI_INTEROP_CMAKE_DIR=cmake \
+  -DPYFMI_INTEROP_RUNTIME_INCLUDE_DIR=src/runtime/include \
+  -DPYFMI_INTEROP_RUNTIME_LIBRARY=build/runtime/libpyfmi_interop_runtime.a \
+  -DPYFMI_INTEROP_TRANSPORT_INCLUDE_DIR=src/transport/include \
+  -DPYFMI_INTEROP_TRANSPORT_LIBRARY=build/runtime/libpyfmi_interop_transport.a
+cmake --build build/actuator_link/out
 ```
 
-A generated model whose role is not `none` also links the static transport
-library, because the UDP and TCP backends register themselves from static
-initializers and a plain archive link would drop them. The generated project
-takes two more cache variables and fails configuration with a clear message
-when a role model is configured without them:
+`PYFMI_INTEROP_CMAKE_DIR` and the runtime paths are required for every
+generated project; the transport paths are required when the model's role is
+not `none`. `pyfmi-interop build` passes these path variables, resolving them
+for the checkout or the installed wheel, and leaves `PYFMI_INTEROP_WIRE` at its
+default.
+
+The transport library is linked whole because the UDP and TCP backends
+register themselves from static initializers, and a plain archive link would
+drop them. The generated project fails configuration with a clear message when
+a role model is configured without the transport include directory or library:
 
 - `PYFMI_INTEROP_TRANSPORT_INCLUDE_DIR` — directory exposing
-  `pyfmi_interop/transport/*.hpp`. It is `transport/include` in a checkout and
-  `_runtime/include` in a wheel.
+  `pyfmi_interop/transport/*.hpp`. It is `src/transport/include` in a checkout
+  and `_runtime/include` in a wheel.
 - `PYFMI_INTEROP_TRANSPORT_LIBRARY` — path to
   `libpyfmi_interop_transport.a` (`.lib` on Windows). The top-level build writes
   it to `build/runtime/`.
@@ -140,7 +154,10 @@ selects the backend and endpoint:
 - `udp://<bind-host>:<port>[?peer=<host>:<port>]` — one datagram per frame;
 - `tcp://<bind-host>:<port>[?peer=<host>:<port>]` — stream transport.
 
-A port of `0` asks the OS for an ephemeral port. `PYFMI_INTEROP_TRANSPORT_ENDPOINT`
+A port of `0` asks the OS for an ephemeral port. A model that declares the
+parameter interface takes `transport`, `bind_address`, and `peer_address` from
+its FMI parameters; the environment is the fallback only when no parameter
+interface is declared. `PYFMI_INTEROP_TRANSPORT_ENDPOINT`
 is the legacy suffix for a bare scheme name. The full grammar, framing, and
 validation rules are in `docs/wire.md`.
 
@@ -152,9 +169,9 @@ bundles only that backend's artifacts. Every FMU also carries
 ## Package
 
 ```bash
-pyfmi-interop package build/loopback \
-  --library build/loopback/build/libLoopbackModel.so \
-  --out build/loopback.fmu
+pyfmi-interop package build/actuator_link \
+  --library build/actuator_link/build/libActuatorLink.so \
+  --out build/actuator_link.fmu
 ```
 
 Packaging writes `modelDescription.xml` and a deterministic `.fmu` archive. The
@@ -170,9 +187,10 @@ the built shared library. The library must exist and match the model name.
 
 | Command | Purpose |
 | --- | --- |
-| `pyfmi-interop transports` | List the byte transport names (`udp`, `tcp`, `unix`). |
+| `pyfmi-interop transports` | List the byte transport names (`loopback`, `udp`, `tcp`). |
 | `pyfmi-interop serializations` | List the payload backends (`protobuf`, `packed`, `opaque`). |
 | `pyfmi-interop inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
+| `pyfmi-interop schema --model-json PATH --out DIR [--serialization NAME]` | Emit the selected backend's schema bundle (`wire.json`, plus `<Model>.proto` for protobuf). |
 | `pyfmi-interop generate --model-json PATH --out DIR [--serialization NAME] [--role ROLE]` | Generate C++ from IR JSON. |
 | `pyfmi-interop generate --sysml PATH --out DIR [--step-size S] [--name NAME] [--serialization NAME] [--role ROLE]` | Generate C++ from SysML v2. |
 | `pyfmi-interop build DIR [--build-dir DIR]` | Configure and build a generated model with CMake. |

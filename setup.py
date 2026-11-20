@@ -79,7 +79,7 @@ class build_py(_build_py):
                 transport_source, destination_dir / transport_library_name()
             )
 
-        headers_source = ROOT / "runtime" / "include"
+        headers_source = ROOT / "src" / "runtime" / "include"
         headers_target = destination_dir / "include"
         if headers_target.exists():
             shutil.rmtree(headers_target)
@@ -87,7 +87,7 @@ class build_py(_build_py):
         # Both headers share the pyfmi_interop/ root, so merge rather than
         # replace the runtime headers.
         shutil.copytree(
-            ROOT / "transport" / "include", headers_target, dirs_exist_ok=True
+            ROOT / "src" / "transport" / "include", headers_target, dirs_exist_ok=True
         )
 
         cmake_target_dir = destination_dir / "cmake"

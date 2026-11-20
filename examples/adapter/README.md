@@ -33,10 +33,11 @@ separate `ScalarVariable` entries in `modelDescription.xml`.
 | Deployment parameter | `transport`, `bind_address`, `peer_address`, `queue_depth`, `deadline_s` | FMI `causality="parameter"`, `variability="fixed"` with an authored `start` | never |
 | Derived | value reference, field number, wire direction, model id | computed from the interface by the generators | yes (model id is in the envelope header) |
 
-Parameters are configuration, not wire fields. They are omitted from `wire.json`,
-from the protobuf schema and packed layout, and from the `model_id` digest. The
-remaining INPUT/OUTPUT fields keep the value references they were assigned, and
-each wire field number stays equal to its value reference.
+Parameters are configuration, not wire fields. They are omitted from the
+payload schema, from the packed layout, and from the `model_id` digest; the
+`psysml2` descriptor records them in a separate `parameters` list rather than
+in `signals`. The remaining INPUT/OUTPUT fields keep the value references they
+were assigned, and each wire field number stays equal to its value reference.
 
 ## Wire direction is the inverse of FMI causality
 
@@ -55,12 +56,12 @@ Because `ActuatorLink` has both inputs and outputs, the derived role is
 
 ## Generated FMU layout
 
-For `ActuatorLinkAdapter` on Linux the archive contains:
+For the default `ActuatorLink` identifier on Linux the archive contains:
 
 ```text
 modelDescription.xml                     FMI 2.0 variables, causalities, value references
-binaries/linux64/ActuatorLinkAdapter.so  generated adapter shared library
-binaries/linux64/ActuatorLinkAdapter.proto  payload schema (protobuf only)
+binaries/linux64/ActuatorLink.so         generated adapter shared library
+binaries/linux64/ActuatorLink.proto      payload schema (protobuf only)
 binaries/linux64/wire.json               field table, format, role, wire directions
 resources/model.json                     resolved IR (role, serialization, signals)
 resources/runtime.json                   fingerprint, binary path, format id
@@ -121,13 +122,17 @@ Both write under `build/examples/adapter/<serialization>/` (gitignored):
 ```text
 build/examples/adapter/<serialization>/model/       generated C++ and schema
 build/examples/adapter/<serialization>/build/       CMake build tree
-build/examples/adapter/<serialization>/ActuatorLinkAdapter.fmu
+build/examples/adapter/<serialization>/ActuatorLink.fmu
 ```
 
 Use `--out DIR` to choose another root, and `--sysml`, `--name`,
-`--step-size`, or `--role` to override the inputs. The script prints the
-derived role, payload message and format id, the field table, transport URI
-examples, and the final `.fmu` path.
+`--step-size`, or `--role` to override the inputs. The default `--name` is
+`ActuatorLinkAdapter`; on the `psysml2` layer it becomes `model_name` in
+`resources/runtime.json`, while the FMI identifier and the file stems above come
+from the exported component (`ActuatorLink`). `--fmi-layer interop` instead
+keeps the repository's own FMI facade and names the FMU, binary, and proto
+after `--name`. The script prints the derived role, payload message and format
+id, the field table, transport URI examples, and the final `.fmu` path.
 
 ## Pointing an external peer at it
 
@@ -135,7 +140,7 @@ Configure this FMU through its parameters as shown above. Give the peer the
 address it should bind or send to according to its own role. A UDP peer that
 consumes the adapter's published `command` fields binds a socket and receives
 frames; the frame carries the payload whose schema is
-`binaries/linux64/ActuatorLinkAdapter.proto` inside the `.fmu` for `protobuf`.
+`binaries/linux64/ActuatorLink.proto` inside the `.fmu` for `protobuf`.
 Extract that file and compile it into the peer. For `packed` there is no
 `.proto`: the peer reads `binaries/linux64/wire.json` and reproduces the packed
 layout in value-reference order.

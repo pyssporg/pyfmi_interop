@@ -37,4 +37,4 @@ state only.
 - Runnable examples: `examples/`.
 - Generated builds: `build/` and `/tmp`.
 - Generated sources and FMUs: build output, never checked in.
-- The vendored FMI 2.0 headers: `third_party/fmi2/headers/`.
+- The vendored FMI 2.0 headers: `3rd_party/fmi2/headers/`.

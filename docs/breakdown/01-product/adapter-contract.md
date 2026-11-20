@@ -13,12 +13,14 @@ A transport carries wire frames; it does not interpret the model interface.
 
 - **Boundary:** the repository owns the envelope and the `Transport` interface,
   not a protocol. There is no adapter catalogue or compile-gated protocol stub.
-- **Frames:** exchange uses the preallocated `Sample` frame; a backend allocates
-  queues or buffers in `initialize()`, never in `send` or `receive`.
+- **Frames:** exchange uses whole wire frames as non-owning byte spans; a
+  backend allocates queues or buffers in `initialize()`, never in `send` or
+  `receive`.
 - **Loopback:** the in-process backend is always built and is the only backend
   needed for single-process tests.
-- **Byte transports:** `udp`, `tcp`, and `unix` name the byte carriers in the
-  CLI boundary; framing is the only contract this repository defines for them.
+- **Byte transports:** `loopback`, `udp`, and `tcp` name the byte carriers; the
+  CLI lists the same names and the registry is authoritative at run time.
+  Framing is the only contract this repository defines for them.
 - **Deployment:** a transport endpoint is resolved per instance from the
   model's `parameter` interface (`transport`, `bind_address`, `peer_address`,
   `queue_depth`, `deadline_s`) before initialization. The process environment

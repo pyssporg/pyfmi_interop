@@ -34,9 +34,9 @@ CoSimulation FMU.
 
 - The Python layer ingests SysML or IR JSON, emits C++, CMake, the wire
   schema, and the adapter model, builds the native model, and packages the FMU.
-- The C++ layer in `runtime/` owns the reusable `ModelRuntime` interface, the
-  fixed-step scheduler, the wire codec, the serialization backends, and the
-  `Transport` registry.
+- The C++ layer in `src/runtime/` owns the reusable `ModelRuntime` interface,
+  the fixed-step scheduler, the wire codec, the serialization backends, and the
+  `Transport` registry; the UDP and TCP backends live in `src/transport/`.
 - The generated model owns the typed signal members, value-reference
   accessors, the `user_step` hook, and the factory
   `pyfmi_interop_create_model`. The generated adapter owns only the flow to
@@ -53,11 +53,12 @@ CoSimulation FMU.
   order. Every wire generator, the builder and the packager read the IR; none
   re-derives wire numbering.
 - **One wire contract, one framing authority.** `src/pyfmi_interop/wire/` and
-  `runtime/src/wire.cpp` are the only framing implementations. Each
-  serialization backend has exactly one schema emitter: `schema.py` for the
-  canonical protobuf payload and its counterpart for `packed`. Both ends must
-  reproduce the same conformance vectors; no protocol-specific branch grows
-  elsewhere.
+  `src/runtime/src/wire.cpp` are the only framing implementations. Each
+  serialization backend has exactly one schema emitter:
+  `src/pyfmi_interop/serialization/protobuf.py` for the canonical protobuf
+  payload (`schema.py` is its backwards-compatible facade) and the `packed`
+  backend for the packed layout. Both ends must reproduce the same conformance
+  vectors; no protocol-specific branch grows elsewhere.
 - **Two registered seams.** Serialization is chosen when the adapter is
   generated, one emitter per backend; transports are chosen at run time by
   name — loopback, UDP, TCP. A name resolves to one backend, an unknown or
@@ -94,7 +95,7 @@ CoSimulation FMU.
 
 ## Environment
 
-- Python >= 3.10 and a C++17 compiler; `cmake` and `ninja` build the native
+- Python >= 3.11 and a C++17 compiler; `cmake` and `ninja` build the native
   runtime.
 - Native build: `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` then
   `cmake --build build`.

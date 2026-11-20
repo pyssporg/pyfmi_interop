@@ -2,27 +2,33 @@
 id: INFO-006
 type: info
 title: Transport runtime
-summary: runtime/ exposes one Transport interface and one registry, with the always-built in-process loopback backend and no protocol binding.
+summary: src/runtime/ exposes one Transport interface and one registry; loopback lives there, and the UDP and TCP backends live in src/transport/.
 date: 2026-11-09
 status: current
 ---
 
 # Transport runtime
 
-`runtime/` exposes one `Transport` interface and one registry; the in-process
-loopback backend is always built, and protocol bindings are not part of this
-repository.
+`src/runtime/` exposes one `Transport` interface and one registry; the in-process
+loopback backend is always built there, and the UDP and TCP backends are built
+into the separate static library `pyfmi_interop_transport` from
+`src/transport/`. Protocol bindings are not part of this repository.
 
-- **Interface:** `initialize`, `finalize`, `available`, `send`, and `receive`;
-  exchange uses the preallocated `Sample` frame.
-- **Configuration:** `TransportConfig` carries name, endpoint, timeout, and an
-  ordered key/value option list; it may allocate, but only in `initialize`.
-- **Registry:** `make_transport` maps a known name to an implementation and
-  lists the known names on an unknown request.
-- **Loopback:** stores signals in preallocated frames for single-process tests
-  and runs without a network or SDK.
-- **Byte transports:** `udp`, `tcp`, and `unix` name the carriers of a wire
-  frame; the frame contract is `docs/wire.md` and the transport itself is
-  outside this repository.
+- **Interface:** `initialize(const std::string& uri)`, `finalize`, `send`,
+  `receive`, and `stats`; `send` takes a `ByteSpan` of one whole wire frame and
+  `receive` returns the newest queued frame as bytes.
+- **Non-blocking:** `send` returns false when the frame would block or no peer
+  is known; `receive` returns an empty optional when no frame is queued. The
+  step loop never waits for a peer.
+- **Registry:** `make_transport` resolves a bare scheme or a URI scheme to one
+  backend and `transport_names` returns the sorted names; an unknown scheme
+  throws `TransportError` listing every registered name.
+- **Loopback:** an in-process byte-frame transport for single-process tests; it
+  needs no network or SDK.
+- **Byte transports:** `loopback`, `udp`, and `tcp` name the carriers of a wire
+  frame; the frame contract is `docs/wire.md`. The URI grammar is parsed in
+  `src/transport/src/transport_uri.cpp`.
+- **Linkage:** the UDP and TCP backends register from static initializers, so a
+  consumer links `libpyfmi_interop_transport.a` with whole-archive.
 - **No fallback:** a missing backend or rejected configuration fails
   initialization; the runtime does not substitute loopback.

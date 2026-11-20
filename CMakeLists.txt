@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(pyfmi_interop VERSION 0.3.0 LANGUAGES CXX)
+project(pyfmi_interop VERSION 0.5.0 LANGUAGES CXX)
 
 option(PYFMI_INTEROP_BUILD_TESTS "Build the C++ runtime tests" ON)
 
@@ -24,7 +24,7 @@ include(CTest)
 # archive must be linked with whole-archive wherever it is consumed.
 function(pyfmi_interop_link_transport_whole_archive target)
     target_include_directories(${target} PRIVATE
-        ${PROJECT_SOURCE_DIR}/transport/include)
+        ${PROJECT_SOURCE_DIR}/src/transport/include)
     if(MSVC)
         target_link_options(${target} PRIVATE
             "/WHOLEARCHIVE:$<TARGET_FILE:pyfmi_interop_transport>")
@@ -39,5 +39,5 @@ function(pyfmi_interop_link_transport_whole_archive target)
     endif()
 endfunction()
 
-add_subdirectory(runtime)
-add_subdirectory(transport)
+add_subdirectory(src/runtime)
+add_subdirectory(src/transport)

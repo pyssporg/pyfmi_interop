@@ -26,8 +26,9 @@ and one generated realtime binary.
   the descriptor, both payload codecs, and the model id exclude them. The
   remaining INPUT/OUTPUT fields keep their value references as field numbers.
 - **Resources:** canonical `model.json` and `runtime.json` under `resources/`,
-  plus the `<Model>.proto` and `wire.json` schema bundle next to the binary, so
-  the archive is self-describing.
+  plus the selected backend's schema bundle next to the binary: `wire.json` for
+  every backend and `<Model>.proto` for `protobuf` only, so the archive is
+  self-describing.
 - **Determinism:** packaging sorts entries, fixes file modes and timestamps to
   a constant, and emits byte-identical archives for equal inputs.
 - **Validity:** the document has one `CoSimulation` element and declares its

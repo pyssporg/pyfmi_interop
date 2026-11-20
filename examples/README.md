@@ -1,36 +1,31 @@
 # Examples
 
-Checked-in examples are inputs, not build output. `loopback/` is a small IR
-JSON model that the CLI can inspect, generate from, build, and package without
-a SysML dependency; `adapter/` is a SysML v2 part definition driven through the
-Python API into an adapter `.fmu`. No binaries, generated sources, or `.fmu`
-archives are checked in.
+Checked-in examples are inputs, not build output. `adapter/` is a SysML v2 part
+definition driven through the Python API into an adapter `.fmu`. No binaries,
+generated sources, or `.fmu` archives are checked in.
 
 | Example | Input | Model | Step | Signals |
 | --- | --- | --- | --- | --- |
-| `loopback/` | IR JSON | `LoopbackModel` | 1 kHz | one real input `u`, one real output `y` |
-| `adapter/` | SysML v2 | `ActuatorLinkAdapter` | 1 kHz | `Command` in (Real, Integer, Boolean, `Real[3]`) and `Feedback` out (Real, Integer, Boolean, `Real[2]`) |
+| `adapter/` | SysML v2 | `ActuatorLink` | none (master-driven) | `Command` in (Real, Integer, Boolean, `Real[3]`) and `Feedback` out (Real, Integer, Boolean, `Real[2]`) |
 
-## Run an example
+On the default `psysml2` layer the FMI model identifier, shared library, proto,
+and `.fmu` use `ActuatorLink`; the script's default `--name`
+(`ActuatorLinkAdapter`) is recorded as `model_name` in `resources/runtime.json`.
+The adapter has no step of its own: the master owns the cadence.
+
+## Run the example
 
 From the repository root, after building the native runtime and installing the
-package:
-
-```bash
-pyfmi-interop inspect --model-json examples/loopback/model.json
-pyfmi-interop generate --model-json examples/loopback/model.json --out build/loopback
-pyfmi-interop build build/loopback
-pyfmi-interop package build/loopback \
-  --library build/loopback/build/libLoopbackModel.so \
-  --out build/loopback.fmu
-```
-
-Build output stays under `build/`, which is ignored by Git. The IR JSON format
-is the `ModelDefinition` serialization described in `docs/usage.md`.
-
-The adapter example generates, builds, and packages an FMU from SysML with the
-Python API instead of the CLI; see `adapter/README.md`:
+package with the `sysml` extra:
 
 ```bash
 python examples/adapter/generate_adapter_fmu.py --serialization protobuf
 ```
+
+The script runs the whole chain — `load_model`, `generate_model`, `build_model`,
+`package_fmu` — and writes under `build/examples/adapter/<serialization>/`,
+which is ignored by Git. Use `--serialization packed` for the dependency-free
+payload; see `adapter/README.md` for the FMU and wire details.
+
+IR JSON (`ModelDefinition`) remains a supported `generate` and `inspect` input;
+the format is described in `docs/usage.md`.

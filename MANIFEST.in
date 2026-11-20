@@ -2,8 +2,7 @@ include LICENSE
 include README.md
 include pyproject.toml
 include setup.py
-recursive-include src/pyfmi_interop/codegen/templates *
-recursive-include runtime/include *.hpp
-recursive-include transport/include *.hpp
+recursive-include src/runtime/include *.hpp
+recursive-include src/transport/include *.hpp
 recursive-include cmake *.cmake
-recursive-include third_party *
+recursive-include 3rd_party *

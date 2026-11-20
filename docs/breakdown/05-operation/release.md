@@ -20,7 +20,9 @@ the test matrix is green.
 - **Artifacts:** `python -m build --wheel --sdist`; the wheel tag is
   `py3-none-<platform>`.
 - **Metadata guard:** exactly one wheel and one sdist, no `0.0.0`, the wheel
-  contains `_runtime/libpyfmi_interop_runtime.a` and the public headers.
+  contains `_runtime/libpyfmi_interop_runtime.a`,
+  `_runtime/libpyfmi_interop_transport.a`, the public headers under
+  `_runtime/include/`, and `_runtime/cmake/wire.cmake`.
 - **Tag guard:** a `v<version>` tag must equal the imported `__version__`.
 - **Publish:** upload `dist/` and attach it to the GitHub release with
   `fail_on_unmatched_files: true`.

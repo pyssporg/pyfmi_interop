@@ -108,7 +108,7 @@ def runtime_include_dirs(repo_root: Path | None = None) -> list[Path]:
     if bundled.is_dir():
         candidates.append(bundled)
     if repo_root is not None:
-        source_include = Path(repo_root) / "runtime" / "include"
+        source_include = Path(repo_root) / "src" / "runtime" / "include"
         if source_include.is_dir():
             candidates.append(source_include)
     return candidates
@@ -145,7 +145,7 @@ def transport_include_dirs(repo_root: Path | None = None) -> list[Path]:
     if (bundled / "pyfmi_interop" / "transport").is_dir():
         candidates.append(bundled)
     if repo_root is not None:
-        source_include = Path(repo_root) / "transport" / "include"
+        source_include = Path(repo_root) / "src" / "transport" / "include"
         if source_include.is_dir():
             candidates.append(source_include)
     return candidates

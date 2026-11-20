@@ -463,7 +463,9 @@ def _compile_runner(directory: Path, library: Path) -> Path:
     source = directory / "runner.cpp"
     source.write_text(_RUNNER, encoding="utf-8")
     executable = directory / "runner"
-    headers = Path(__file__).resolve().parents[1] / "third_party" / "fmi2" / "headers"
+    headers = (
+        Path(__file__).resolve().parents[1] / "3rd_party" / "fmi2" / "headers"
+    )
     completed = subprocess.run(
         [
             _CXX,

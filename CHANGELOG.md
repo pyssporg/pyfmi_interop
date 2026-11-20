@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Native sources live under `src/`: `runtime/` is `src/runtime/`, `transport/`
+  is `src/transport/`, and the vendored FMI headers are `3rd_party/fmi2/`
+  instead of `third_party/`. CMake, `setup.py`, the sdist manifest, and the
+  Python path resolution follow the new layout.
+
+### Fixed
+
+- The invalid `Topic :: Scientific/Engineering :: Simulation` classifier no
+  longer blocks metadata generation; the valid parent classifier is used.
+
 ## [0.5.0] - 2026-11-20
 
 ### Breaking

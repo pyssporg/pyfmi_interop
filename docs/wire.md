@@ -67,9 +67,9 @@ the receiver can reject a mismatched serializer before parsing:
 
 | Value | Name | Meaning |
 | ---: | --- | --- |
-| 0 | `opaque` | caller-defined bytes; the `raw` build |
-| 1 | `protobuf` | a `<Model>Payload` protobuf message |
-| 2 | `packed` | reserved for a future packed encoding |
+| 0 | `opaque` | caller-defined bytes; the `opaque` backend |
+| 1 | `protobuf` | a `<Model>Payload` protobuf message; the `protobuf` backend |
+| 2 | `packed` | the deterministic little-endian packed layout; the `packed` backend |
 
 The tag is exposed on the decoded frame (`DecodedFrame.header.payload_format`
 in Python, `DecodedFrame.frame.header.payload_format` in C++) as an enum. Any
@@ -210,11 +210,13 @@ class Transport {
 public:
     virtual void initialize(const std::string& uri);
     virtual void finalize();
-    virtual bool send(std::span<const std::byte> frame) = 0;
+    virtual bool send(ByteSpan frame) = 0;
     virtual std::optional<std::vector<std::byte>> receive() = 0;
     virtual TransportStats stats() const;
 };
 ```
+
+`ByteSpan` is the C++17 non-owning byte view in place of `std::span`.
 
 `send` returns false when the frame could not be accepted (the socket would
 block, or no peer is known yet); the caller skips the frame. `receive` returns
@@ -224,7 +226,7 @@ configuration throws `TransportError` from `initialize`.
 
 ### URI grammar
 
-Configuration is parsed in one place (`transport/src/transport_uri.cpp`):
+Configuration is parsed in one place (`src/transport/src/transport_uri.cpp`):
 
 ```
 loopback
@@ -245,9 +247,11 @@ tcp://<bind-host>:<port>[?peer=<host>:<port>]
   currently implements IPv4 sockets.
 
 `PYFMI_INTEROP_TRANSPORT` carries the URI. An empty value selects `loopback`;
-`none` disables the transport. The legacy
-`PYFMI_INTEROP_TRANSPORT_ENDPOINT` still supplies the authority when the value
-is a bare scheme. A model whose role is `none` never opens a transport.
+`none` is not a backend, so a model that opens a transport reports an error for
+it. The legacy `PYFMI_INTEROP_TRANSPORT_ENDPOINT` still supplies the authority
+when the value is a bare scheme. This environment channel is only consulted
+when the model declares no parameter interface; a model whose role is `none`
+never opens a transport.
 
 ### Registry
 
@@ -284,7 +288,7 @@ and `record_model_id_mismatch()` update them without changing the ABI.
 ### Roles and serialization
 
 The generated model reports its role and codec through the optional
-`WireModelCodec` interface (`runtime/include/pyfmi_interop/runtime/model_runtime.hpp`):
+`WireModelCodec` interface (`src/runtime/include/pyfmi_interop/runtime/model_runtime.hpp`):
 
 ```cpp
 enum class TransportRole { None, Sender, Receiver, Adapter };
@@ -300,10 +304,13 @@ class WireModelCodec {
 
 `ModelRuntime::wire_codec()` returns the codec (the generated model returns
 `this`); a model that returns `nullptr` keeps the historical step-only path.
-The serialization selection is the existing compile-time wire mode:
-`PYFMI_INTEROP_WIRE_PROTOBUF` selects `payload_format = 1`, the `raw` build
-selects `0`, and `wire::payload_mode_name()` exposes the choice. No new
-environment variable selects the serializer.
+The backend is chosen when the model is generated (`--serialization`), and the
+generated codec returns that backend's format id: `protobuf` → `1`, `packed` →
+`2`, `opaque` → `0`. No environment variable selects the serializer. On the
+legacy `interop` FMI layer the CMake wire mode (`PYFMI_INTEROP_WIRE`) still
+gates whether the protobuf codec translation unit is compiled; the generated
+`psysml2` adapter compiles the codec its backend emits and does not depend on
+that mode.
 
 `fmi2DoStep` then runs:
 
@@ -311,7 +318,7 @@ environment variable selects the serializer.
 | --- | --- |
 | `none` | step only (exactly the pre-transport behaviour) |
 | `sender` | step → encode output values → frame → send (skipped if it would block) |
-| `receiver` | receive newest → validate model id and payload format → apply input values → step; no frame holds the previous values and increments an internal miss counter |
+| `receiver` | receive newest → validate model id and payload format → apply input values → step; when no frame arrives, the previous input values stay |
 | `adapter` | receive → apply → step → publish → send |
 
 A frame with a bad CRC, a mismatched model id, a mismatched serializer, or a
@@ -320,29 +327,35 @@ previous input values rather than failing or injecting NaN.
 
 ## Schema bundle
 
-Every packaged FMU carries the payload schema next to its binary, under
-`binaries/<platform>/`:
+Every packaged FMU carries the selected backend's schema next to its binary,
+under `binaries/<platform>/`:
 
-| Artifact | Purpose |
-| --- | --- |
-| `<Model>.proto` | proto3 payload schema; field numbers are the signal `value_reference` ids verbatim |
-| `wire.json` | JSON descriptor of the model, its derived model id, and every signal |
+| Artifact | Shipped by | Purpose |
+| --- | --- | --- |
+| `<Model>.proto` | `protobuf` | proto3 payload schema; field numbers are the wire field numbers verbatim |
+| `wire.json` | every backend | JSON descriptor of the model, its derived model id, and every signal |
 
-The bundle is a pure projection of the IR. Both artifacts are emitted twice
-byte-identically: signals are ordered by `(value_reference, name)`, JSON keys
-are sorted, floats use the shortest round-tripping form, and neither artifact
-contains a timestamp or a filesystem path. `wire.json` records the schema
-format version, model name, GUID, model id as 16 hex characters (the same
-8-byte id the envelope carries), step size, `payload_message`, and
-`proto_package`, followed by the ordered `signals` list
-(`{id, name, data_type, direction, rate_hz, unit, capacity}`) and the
-`rate_groups` list.
+The bundle is a pure projection of the model. Artifacts are emitted
+byte-identically on repeated runs: JSON keys are sorted, floats use the
+shortest round-tripping form, and neither artifact contains a timestamp or a
+filesystem path. `wire.json` records the backend (`format`, `format_id`), the
+schema format version, model name, GUID, model id as 16 hex characters (the
+same 8-byte id the envelope carries), step size when the model has one, role,
+`payload_message`, and `proto_package`, followed by the ordered `signals`
+list. The legacy `interop` layer orders signals by `(value_reference, name)`
+and writes each entry as `{id, name, field, wire, data_type, direction,
+rate_hz, unit, capacity}` plus `rate_groups`; `id` is the FMI value reference.
+The `psysml2` adapter layer orders signals by name with fields `1..n` and
+writes each entry as `{field, value_reference, name, wire, data_type,
+direction, rate_hz, unit, capacity}` plus a separate `parameters` list,
+because parameters are FMI variables without wire fields.
 
 The `.proto` declares `package pyfmi_interop.wire;`, a shared `Value` message
 with a `oneof kind` (`double real`, `sint64 integer`, `bool boolean`,
 `bytes string`), and one payload message per model. Each payload field uses the
-signal's IR id as its field number, so ids are never renumbered and gaps stay
-gaps. The message reserves protobuf's internal range `19000 to 19999`; it does
+signal's wire field number, so ids are never renumbered and gaps stay
+gaps on the legacy layer; adapter fields are contiguous `1..n`. The message
+reserves protobuf's internal range `19000 to 19999`; it does
 not reserve the gaps between used ids. Each field carries a comment with the
 signal name, type, direction, rate (base or Hz), unit (or `unspecified` /
 `dimensionless`), and string capacity in bytes.
@@ -369,15 +382,15 @@ model-id domain separator and `<d`/`<IB` record layout, magic `PFMI`, version
 
 | File | Purpose |
 | --- | --- |
-| `runtime/include/pyfmi_interop/runtime/wire.hpp` | `encode_frame` / `decode_frame`, `Header`, `Frame`, `PayloadFormat`, `ErrorCode` / `WireError`, `crc32`, `sha256`, `model_id` |
-| `runtime/src/wire.cpp` | Packed little-endian envelope, CRC32/ISO-HDLC table, portable SHA-256 (no OpenSSL) |
-| `runtime/include/pyfmi_interop/runtime/transport.hpp` | Byte-frame `Transport`, `TransportStats`, registry, `REGISTER_TRANSPORT` |
-| `runtime/include/pyfmi_interop/runtime/loopback_transport.hpp` | In-process reference byte transport |
-| `transport/include/pyfmi_interop/transport/transport_uri.hpp` | URI grammar shared by the UDP and TCP backends |
-| `transport/include/pyfmi_interop/transport/udp_transport.hpp` | One-datagram-per-frame UDP backend |
-| `transport/include/pyfmi_interop/transport/tcp_transport.hpp` | Stream backend with envelope reassembly |
-| `runtime/include/pyfmi_interop/runtime/payload.hpp` | `PayloadCodec` interface plus the compile-time `payload_mode_name()` |
-| `runtime/src/payload.cpp` | Reports the selected payload mode to dependents |
+| `src/runtime/include/pyfmi_interop/runtime/wire.hpp` | `encode_frame` / `decode_frame`, `Header`, `Frame`, `PayloadFormat`, `ErrorCode` / `WireError`, `crc32`, `sha256`, `model_id` |
+| `src/runtime/src/wire.cpp` | Packed little-endian envelope, CRC32/ISO-HDLC table, portable SHA-256 (no OpenSSL) |
+| `src/runtime/include/pyfmi_interop/runtime/transport.hpp` | Byte-frame `Transport`, `TransportStats`, registry, `REGISTER_TRANSPORT` |
+| `src/runtime/include/pyfmi_interop/runtime/loopback_transport.hpp` | In-process reference byte transport |
+| `src/transport/include/pyfmi_interop/transport/transport_uri.hpp` | URI grammar shared by the UDP and TCP backends |
+| `src/transport/include/pyfmi_interop/transport/udp_transport.hpp` | One-datagram-per-frame UDP backend |
+| `src/transport/include/pyfmi_interop/transport/tcp_transport.hpp` | Stream backend with envelope reassembly |
+| `src/runtime/include/pyfmi_interop/runtime/payload.hpp` | `PayloadCodec` interface plus the compile-time `payload_mode_name()` |
+| `src/runtime/src/payload.cpp` | Reports the selected payload mode to dependents |
 
 `ErrorCode` names mirror the Python taxonomy: `InvalidMagic`,
 `UnsupportedWireVersion`, `InvalidHeaderSize`, `UnsupportedPayloadFormat`,
@@ -392,7 +405,7 @@ CRC32, declared length, trailing bytes, payload CRC32.
 The model id is derived with a small portable SHA-256 over the documented input.
 The C++ `model_id` reproduces the Python digest for `demo`
 (`d6b64a33d05b491b`) and `demo_model` (`068406171f053c51`); this parity is
-asserted in `runtime/tests/test_wire.cpp`.
+asserted in `src/runtime/tests/test_wire.cpp`.
 
 ### Wire mode option
 
@@ -411,6 +424,9 @@ The logic lives in `cmake/wire.cmake` and is included by the top-level
 libprotobuf and `protoc`; selecting it without them is a configure error rather
 than a silent fallback. `raw` is fully supported and keeps the envelope
 payload-agnostic: caller bytes are carried unchanged with payload format `0`.
+This mode governs the native runtime and the legacy `interop` FMI layer; the
+`psysml2` adapter selects its codec at generation with `--serialization`
+(`protobuf`, `packed`, or `opaque`) and does not branch on the mode.
 
 ### Build both modes
 
