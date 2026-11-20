@@ -9,23 +9,39 @@ below it knows the model's signals or equations.
 
 ### Python generation layer
 
+The Python layer is split at the SysML boundary into `core/` (SysML-free) and
+`sysml/` (ingestion and the adapter's FMI layer).
+
 | Module | Responsibility |
 | --- | --- |
-| `src/pyfmi_interop/ir.py` | `ModelDefinition`, `Signal`, `RateGroup`, value-reference assignment, canonical JSON. |
-| `src/pyfmi_interop/sysml.py` | Ingestion through `pycps_sysml2` and `pyfmi_sysml2` into the IR. |
-| `src/pyfmi_interop/definitions/` | The bundled `PyfmiInterop` SysML vocabulary and the conditional include root. |
-| `src/pyfmi_interop/timing.py` | Rate and deadline validation, step alignment, and schedule construction. |
-| `src/pyfmi_interop/codegen/` | Emits the C++ source tree and the per-model `CMakeLists.txt`. |
-| `src/pyfmi_interop/builder.py` | Configures and runs the CMake build. |
-| `src/pyfmi_interop/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
+| `src/pyfmi_interop/core/spec.py` | `ModelSpec` (the public interface contract) and `BuildConfig` (serialization, role, prefix). |
+| `src/pyfmi_interop/core/ir.py` | `ModelDefinition`, `Signal`, `RateGroup`, value-reference assignment, canonical JSON. |
+| `src/pyfmi_interop/core/timing.py` | Rate and deadline validation, step alignment, schedule construction. |
+| `src/pyfmi_interop/core/codegen/` | Emits the C++ source tree and the per-model `CMakeLists.txt`. |
+| `src/pyfmi_interop/core/builder.py` | Configures and runs the CMake build. |
+| `src/pyfmi_interop/core/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
+| `src/pyfmi_interop/core/pipeline.py` | `Compilation` and `compile_model`: generate, build, package in one call. |
+| `src/pyfmi_interop/sysml/parse.py` | One parse through `pycps_sysml2` / `pyfmi_sysml2`; returns `ParsedModel(spec, architecture, unit, composition)`. |
+| `src/pyfmi_interop/sysml/generate.py` | `generate_adapter(parsed, out_dir, config)`; never reloads the source. |
+| `src/pyfmi_interop/sysml/adapter.py` | The `pyfmi_sysml2` FMI layer for the adapter artifact. |
+| `src/pyfmi_interop/sysml/definitions/` | The bundled `PyfmiInterop` SysML vocabulary. |
 | `src/pyfmi_interop/cli.py` | The `pyfmi-interop` command surface. |
 
+`core/` imports no SysML package. The old import paths (`pyfmi_interop.ir`,
+`.wire`, `.serialization`, `.codegen`, `.builder`, `.packaging`, `.schema`,
+`.native`, `.roles`, `.timing`, `.psysml2`, `.definitions`) remain as
+re-export-only compatibility facades.
+
 A model may span packages: `load_model(includes=...)` and
-`generate_model(sysml_includes=...)` (CLI: repeatable `--include PATH`) pass the
-same extra roots to the IR load and to the `psysml2` reparse. Export selection
-stays leaf-only among `:> FmuModel` candidates, and imported definitions are
-selectable, so an app file that only imports a library exports the library's
-leaf under its bare name.
+`parse(..., includes=...)` (CLI: repeatable `--include PATH`) pass the same
+extra roots to the single load. Export selection stays leaf-only among
+`:> FmuModel` candidates, and imported definitions are selectable, so an app
+file that only imports a library exports the library's leaf under its bare
+name.
+
+SysML is parsed exactly once: `parse` returns the specification and the opaque
+`pycps_sysml2` architecture together, and `generate_adapter` consumes that
+`ParsedModel` rather than reloading the file.
 
 ### C++ runtime layer
 
@@ -41,14 +57,14 @@ leaf under its bare name.
 
 ### Wire layer
 
-`src/pyfmi_interop/wire/` and `src/runtime/src/wire.cpp` implement the same
-length-delimited, CRC32-checked, version-tagged envelope, the single framing
-authority. Serialization is a registered seam with one schema authority per
-backend: `serialization/protobuf.py` emits the canonical protobuf payload
-schema, `serialization/descriptor.py` emits the shared `wire.json`, and
-`packed` is the second backend; `schema.py` remains a backwards-compatible
-facade. Wire version 2 carries `payload_format` in the envelope, so one framing
-layer serves every backend.
+`src/pyfmi_interop/core/wire/` and `src/runtime/src/wire.cpp` implement the
+same length-delimited, CRC32-checked, version-tagged envelope, the single
+framing authority. Serialization is a registered seam with one schema authority
+per backend: `core/serialization/protobuf.py` emits the canonical protobuf
+payload schema, `core/serialization/descriptor.py` emits the shared `wire.json`,
+and `packed` is the second backend; `core/schema.py` remains a
+backwards-compatible facade. Wire version 2 carries `payload_format` in the
+envelope, so one framing layer serves every backend.
 Discovery, medium, and protocol semantics are outside this repository.
 
 ### Generated model layer
@@ -65,6 +81,13 @@ Per model, codegen emits a small C++17 project (`model_runtime.hpp`,
 The adapter variant emits the same interface publication and consumes the
 corresponding wire direction, but carries no `user_step` and no equations.
 
+Each artifact owns one FMI facade. The core emits the interop facade
+(checked-in `src/runtime/src/fmi2_cs_api.cpp` plus
+`core/packaging.render_model_description`); the adapter takes its FMI interface,
+headers, and model description from `pyfmi_sysml2` and links the runtime
+without whole-archive. Both export the same `fmi2*` ABI, so they never share a
+binary.
+
 ### Wheel layer
 
 The platform wheel (tag `py3-none-<platform>`) carries
@@ -76,19 +99,20 @@ both native archives must be built with CMake before `python -m build`.
 ## Data flow
 
 ```text
-SysML v2 (.sysml) ──┐
-                    ├─► sysml.py ─► ModelDefinition IR ─► codegen/ ─► C++ + CMakeLists.txt
-IR JSON (model.json)┘                                      │
-                                                           ▼
-                                              builder.py ─► CMake ─► model library
-                                                           │
-                                                           ▼
-                                              packaging.py ─► modelDescription.xml + .fmu
+SysML v2 (.sysml) ─► sysml/parse.py ─► ModelSpec ─┐
+                                                  ├─► core/codegen/ ─► C++ + CMakeLists.txt
+IR JSON (model.json) ─► ModelDefinition ──────────┘            │
+                                                               ▼
+                                                core/builder.py ─► CMake ─► model library
+                                                               │
+                                                               ▼
+                                                core/packaging.py ─► modelDescription.xml + .fmu
 ```
 
-The IR is the only hand-off between ingestion, codegen, and packaging. Each
-downstream stage reads the same signal order and value references, so the
-generated header, the runtime accessors, and the FMI variables cannot disagree.
+`ModelSpec` projects onto the internal `ModelDefinition`, the only hand-off
+between ingestion, codegen, and packaging. Each downstream stage reads the same
+signal order and value references, so the generated header, the runtime
+accessors, and the FMI variables cannot disagree.
 
 ## Adapter models and the wire path
 

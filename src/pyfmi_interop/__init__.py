@@ -20,6 +20,7 @@ from typing import Any
 from . import builder, codegen, ir, native, packaging, roles, schema, serialization, wire
 from .builder import build_model
 from .codegen import generate_model
+from .core import BuildConfig, Compilation, ModelSpec, compile_model
 from .definitions import interop_definitions
 from .ir import (
     DataType,
@@ -81,7 +82,9 @@ _LAZY_MODULES = {
 }
 
 __all__ = [
+    "BuildConfig",
     "ChecksumError",
+    "Compilation",
     "DataType",
     "DecodedFrame",
     "Direction",
@@ -97,6 +100,7 @@ __all__ = [
     "NonZeroFlags",
     "NonZeroReserved",
     "ModelDefinition",
+    "ModelSpec",
     "PayloadChecksumError",
     "PayloadFormat",
     "ProjectionError",
@@ -114,6 +118,7 @@ __all__ = [
     "build_schema",
     "builder",
     "codegen",
+    "compile_model",
     "decode",
     "derive_role",
     "deterministic_guid",

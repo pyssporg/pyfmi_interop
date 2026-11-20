@@ -66,6 +66,9 @@ pyfmi_interop = [
   "_runtime/include/pyfmi_interop/transport/**/*.hpp",
   "definitions/*.sysml",
 ]
+"pyfmi_interop.sysml" = [
+  "definitions/*.sysml",
+]
 
 [tool.setuptools.dynamic]
 version = { attr = "pyfmi_interop.__version__" }
@@ -84,7 +87,7 @@ select = ["E", "F", "I", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 markers = [
   "static: inspects source or files without executing the package",
   "unit: one object's behaviour, no generated artifact",
@@ -92,5 +95,6 @@ markers = [
   "contract: two directions must agree (IR round-trip, generated/runtime ABI)",
   "system: the CLI and the native build are driven end to end",
   "cpp: requires a working C++ toolchain and CMake",
+  "sysml: requires the optional SysML ingestion packages",
   "slow: not part of the default CI subset",
 ]

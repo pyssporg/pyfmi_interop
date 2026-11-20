@@ -1,18 +1,27 @@
 ---
 id: INFO-003
 type: info
-title: Execution IR
-summary: ModelDefinition is the single source of truth for signals, value references, and rates.
-date: 2026-11-09
+title: Specification and execution IR
+summary: ModelSpec is the public interface contract, BuildConfig the generation choices, and ModelDefinition the internal IR every generator reads.
+date: 2026-11-20
 status: current
 ---
 
-# Execution IR
+# Specification and execution IR
 
-`ModelDefinition` is the single source of truth for signals, value references,
-and rates; every generator reads it.
+`ModelSpec` is the public contract a caller hands to the generator;
+`ModelDefinition` is the internal IR that every generator, the builder, and the
+packager read.
 
-- **Core types:** `ModelDefinition`, `Signal`, and `RateGroup` in `ir.py`.
+- **Public contract:** `ModelSpec` in `core/spec.py` carries the interface only —
+  name, signals, `step_size_s`, `realtime`, `interface`, `description`,
+  `metadata`, and `rate_groups` — and defaults `guid` to the uuid5 of the name.
+  `BuildConfig` carries the generation choices: `serialization`, `role`, and
+  `prefix`. FMI parameters stay `Direction.PARAMETER` signals, set at init or
+  during simulation; they are runtime configuration, never build configuration.
+- **Internal IR:** `ModelDefinition`, `Signal`, and `RateGroup` in `core/ir.py`;
+  `ModelSpec.to_model(config)` projects onto it. It is not the public entry
+  point, and `fmi_layer` is not part of it.
 - **Value references:** assigned once, gap-free, in canonical signal-name order
   by `assign_value_references`.
 - **Timing:** a realtime model stores `step_size_s`; every signal rate and rate
@@ -24,6 +33,8 @@ and rates; every generator reads it.
 - **Identity:** the GUID is a uuid5 of the model name in a fixed namespace, so
   rebuilding a model preserves its identity.
 - **Serialization:** canonical JSON round-trips through `model_to_dict` and
-  `model_from_dict`; `fingerprint` identifies a build.
+  `model_from_dict`; `fingerprint` identifies a build. `model.json` is the
+  internal build manifest written next to every generated model; the CLI reads
+  that same JSON, and no separate public schema is defined.
 - **Refusals:** duplicate names, duplicate value references, and misaligned
   rates raise before generation.

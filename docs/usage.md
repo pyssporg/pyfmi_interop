@@ -38,7 +38,7 @@ packages.
 `generate` accepts either a SysML v2 source or an IR JSON file, selected by
 `--sysml` or `--model-json`.
 
-- **SysML v2** — a `.sysml` file, ingested through `sysml.py` and
+- **SysML v2** — a `.sysml` file, ingested through `sysml/parse.py` and
   `pycps_sysml2` / `pyfmi_sysml2`. `--step-size` sets the base step for the
   generated IR, and `--name` overrides the model name. Repeatable
   `--include PATH` adds extra package roots, so an app that only imports a
@@ -47,13 +47,15 @@ packages.
   imports it (`private import PyfmiInterop::*;`); a model that does not
   import it sees no extra candidate. `from pyfmi_interop import
   interop_definitions` returns the library path for tooling.
-- **IR JSON** — canonical `ModelDefinition` JSON, as written by `ir.py` and
-  emitted as `<out>/model.json` next to every generated model. It carries the
-  same fields the generator consumes after ingestion, so it is the direct path
-  for tests and for tools that build the IR themselves.
+- **IR JSON** — the canonical `ModelDefinition` JSON, as written by
+  `core/ir.py` and emitted as `<out>/model.json` next to every generated model.
+  `model.json` is the internal build manifest, not a separate public schema; it
+  carries the same fields the generator consumes after ingestion, so it is the
+  direct path for tests and for tools that build the IR themselves.
 
 The checked-in SysML example that drives the same pipeline through the Python
-API (load, generate, build, package) is `examples/adapter/`; see its README.
+API (parse, generate, build, package) is `examples/sysml/adapter/`; see its
+README. `examples/core/compile_model.py` is the SysML-free counterpart.
 
 `inspect` and `schema` take IR JSON only. Generate writes the IR to
 `<out>/model.json`; inspect that file to validate the model and see the
@@ -63,22 +65,50 @@ resolved signal table:
 pyfmi-interop inspect --model-json build/actuator_link/model.json
 ```
 
+## Python API
+
+The public core contract is `ModelSpec` (the interface) plus `BuildConfig`
+(serialization, role, prefix). `compile_model` runs generate, build, and package
+in one call; `generate_model`, `build_model`, and `package_fmu` are the stages:
+
+```python
+from pyfmi_interop.core import BuildConfig, ModelSpec, compile_model
+
+spec = ModelSpec(name="demo", signals=(...), step_size_s=0.001)
+result = compile_model(spec, "build/demo",
+                       config=BuildConfig(serialization="packed"))
+```
+
+SysML is parsed once. `parse(source)` returns a `ParsedModel`; pass that handle
+to `generate_adapter`, which never reloads the source:
+
+```python
+from pyfmi_interop.sysml import generate_adapter, parse
+
+parsed = parse("model.sysml", realtime=False)
+generate_adapter(parsed, "build/adapter", BuildConfig(serialization="protobuf"))
+```
+
+`generate_model(spec, out_dir, config)` emits the interop facade for the
+realtime model; `generate_adapter(parsed, out_dir, config)` takes the adapter's
+facade from `pyfmi_sysml2`. Both export the same `fmi2*` ABI but never share a
+binary.
+
 ## Generate
 
 ```bash
-pyfmi-interop generate --sysml examples/adapter/actuator_link.sysml \
+pyfmi-interop generate --sysml examples/sysml/adapter/actuator_link.sysml \
   --name ActuatorLink --out build/actuator_link
 ```
 
 The CLI emits the realtime model. The checked-in adapter example loads the same
 SysML with `realtime=False` and packages the adapter `.fmu` instead; see
-`examples/adapter/README.md`.
+`examples/sysml/adapter/README.md`.
 
 `--include PATH` is repeatable and adds a SysML package root (file or
 directory) to the load; it is valid only with `--sysml`. The Python API takes
 the same roots as `load_model(app, includes=[library])` and
-`generate_model(..., sysml_includes=[library])`, so the IR and the `psysml2`
-reparse select the same export unit.
+`parse(app, includes=[library])`; one load selects the export unit.
 
 Export selection is leaf-only among `:> FmuModel` candidates: a shared base
 such as `FmuInterop :> FmuModel` is a role, not an FMU. Imported definitions
@@ -101,13 +131,13 @@ units are Python-API workflows:
 
 ### Package one unit
 
-Use the Python API, as `examples/system/build_one.py` does. `--unit` may be
+Use the Python API, as `examples/sysml/system/build_one.py` does. `--unit` may be
 omitted only when the architecture has exactly one unit; otherwise the script
 fails and lists the names.
 
 ```bash
-python examples/system/build_one.py --unit Controller \
-  --sysml examples/system/bench.sysml --out build/examples/system/one \
+python examples/sysml/system/build_one.py --unit Controller \
+  --sysml examples/sysml/system/bench.sysml --out build/examples/sysml/system/one \
   --serialization packed
 ```
 
@@ -115,13 +145,13 @@ It writes `<out>/model`, `<out>/build`, and `<out>/<unit>.fmu`.
 
 ### Package every unit
 
-`examples/system/build_all.py` enumerates `fmu_units(arch)` and runs the same
+`examples/sysml/system/build_all.py` enumerates `fmu_units(arch)` and runs the same
 generate/build/package step per unit. Each unit gets its own IR and FMU; units
 are never merged.
 
 ```bash
-python examples/system/build_all.py --sysml examples/system/bench.sysml \
-  --out build/examples/system/all --serialization packed
+python examples/sysml/system/build_all.py --sysml examples/sysml/system/bench.sysml \
+  --out build/examples/sysml/system/all --serialization packed
 ```
 
 It writes `<out>/<unit>/model`, `<out>/<unit>/build`, and
@@ -292,9 +322,10 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
 ruff check src tests
-python -m pytest -m "not slow"
+python -m pytest -m "not sysml"
 ```
 
-`python -m pytest` runs the full suite, including the slow native end-to-end
-tests. CI runs the non-slow subset on Python 3.11 and 3.12 after building the
-runtime.
+`python -m pytest` runs the full suite, including the `sysml`-marked
+ingestion and end-to-end tests. CI runs the SysML-free core subset on Python
+3.11 and 3.12 after building the runtime. `slow` remains an orthogonal
+qualifier for long native runs.

@@ -12,7 +12,7 @@ and why they meet at one IR and one interface.
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with `pb registers`. -->
-- **INFO-002** [Layer and module map](layers.md) — Python generates, C++ executes, and the generated model joins them through the ModelRuntime interface and one IR.
-- **INFO-003** [Execution IR](ir.md) — ModelDefinition is the single source of truth for signals, value references, and rates.
-- **INFO-004** [Code generation](codegen.md) — codegen emits a C++17 source tree and one CMakeLists.txt per model, with typed signals, publish/consume hooks, user_step, and the factory.
+- **INFO-002** [Layer and module map](layers.md) — A SysML-free core and a SysML boundary generate, C++ executes, and the generated model joins them through ModelRuntime and one IR.
+- **INFO-003** [Specification and execution IR](ir.md) — ModelSpec is the public interface contract, BuildConfig the generation choices, and ModelDefinition the internal IR every generator reads.
+- **INFO-004** [Code generation](codegen.md) — core/codegen emits a C++17 source tree and one CMakeLists.txt per model, with typed signals, publish/consume hooks, user_step, and the factory.
 <!-- pb:index:end -->

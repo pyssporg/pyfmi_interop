@@ -9,16 +9,16 @@ repository's own contract. The project does not interpret the model it carries.
 
 ```text
 SysML v2 definition (.sysml)
-        │  sysml.py — pycps_sysml2 + pyfmi_sysml2 ingestion
+        │  sysml/parse.py — one parse: pycps_sysml2 + pyfmi_sysml2
         ▼
-ModelDefinition IR — signals, value references, rates
-        │  codegen/ — typed signals, user_step, factory
+ModelSpec — the public interface contract
+        │  core/codegen/ — typed signals, user_step, factory
         ▼
 Generated C++17 model + per-model CMakeLists.txt
-        │  builder.py — CMake
+        │  core/builder.py — CMake
         ▼
 Static runtime + model library
-        │  packaging.py — FMI 2.0 modelDescription.xml + deterministic zip
+        │  core/packaging.py — FMI 2.0 modelDescription.xml + deterministic zip
         ▼
 FMI 2.0 CoSimulation .fmu
 
@@ -26,13 +26,21 @@ Wire format: a 56-byte length + CRC32 + payload-format frame carrying an
 opaque, protobuf, or packed payload.
 ```
 
-The Python layer is split into `ir.py`, `sysml.py`, `timing.py`, `codegen/`,
-`serialization/`, `builder.py`, `packaging.py`, and `cli.py`. `serialization/`
-is the payload seam: `protobuf` (canonical), `packed` (deterministic
-little-endian, dependency-free), and `opaque` (caller bytes). The C++ layer in
-`src/runtime/` owns the `ModelRuntime` interface, the fixed-step realtime
-scheduler, the wire codec, and the types it shares with the Python end;
-`src/transport/` holds the UDP and TCP backends.
+The Python layer is split into a SysML-free `core/` and a `sysml/` boundary.
+`core/` holds `spec.py` (`ModelSpec`, `BuildConfig`), `ir.py`, `timing.py`,
+`wire/`, `serialization/`, `codegen/`, `builder.py`, `packaging.py`, and
+`pipeline.py`; `sysml/` holds `parse.py`, `generate.py`, `adapter.py`, and
+`definitions/`; `cli.py` sits at the package root. `core/serialization/` is the
+payload seam: `protobuf` (canonical), `packed` (deterministic little-endian,
+dependency-free), and `opaque` (caller bytes). The old module paths remain as
+re-export-only compatibility facades. The C++ layer in `src/runtime/` owns the
+`ModelRuntime` interface, the fixed-step realtime scheduler, the wire codec,
+and the types it shares with the Python end; `src/transport/` holds the UDP and
+TCP backends.
+
+Each artifact owns one FMI facade: the core emits the interop facade, and the
+adapter takes its FMI interface, headers, and model description from
+`pyfmi_sysml2`. Both export the same `fmi2*` ABI, so they never share a binary.
 
 ## Install
 
@@ -62,23 +70,30 @@ the extra with `pip install -e ".[sysml]"`.
 
 ## Quickstart
 
-The full chain runs from SysML v2 to a packaged adapter FMU — load, generate,
-build, package — through the Python API:
+The SysML-free path builds a `ModelSpec` by hand and compiles it in one call:
+
+```bash
+python examples/core/compile_model.py /tmp/pyfmi_core_demo
+```
+
+The full SysML chain runs from SysML v2 to a packaged adapter FMU — load,
+generate, build, package — through the Python API:
 
 ```bash
 pyfmi-interop transports
 pyfmi-interop serializations
-python examples/adapter/generate_adapter_fmu.py --serialization protobuf
+python examples/sysml/adapter/generate_adapter_fmu.py --serialization protobuf
 ```
 
-The example is `examples/adapter/actuator_link.sysml`: a part definition with
-`Command` inputs and `Feedback` outputs. The adapter has no step of its own;
-the master owns the cadence. The script writes the generated sources, the build
-tree, and the `.fmu` under `build/examples/adapter/<serialization>/`.
-`--serialization packed` selects the dependency-free payload, and `--sysml`,
-`--include`, `--name`, `--step-size`, and `--role` override the inputs; see
-`examples/adapter/README.md`. Run `pyfmi-interop <command> --help` for the
-individual steps.
+The example is `examples/sysml/adapter/actuator_link.sysml`: a part definition
+with `Command` inputs and `Feedback` outputs. The adapter has no step of its
+own; the master owns the cadence. The script writes the generated sources, the
+build tree, and the `.fmu` under
+`build/examples/sysml/adapter/<serialization>/`. `--serialization packed`
+selects the dependency-free payload, and `--sysml`, `--include`, `--name`,
+`--step-size`, and `--role` override the inputs; see
+`examples/sysml/adapter/README.md`. Run `pyfmi-interop <command> --help` for
+the individual steps.
 
 ## Shared SysML vocabulary
 
@@ -134,12 +149,13 @@ in `in` ports (FMI `causality="input"`), not parameters.
 cmake --build build
 ctest --test-dir build --output-on-failure
 ruff check src tests
-python -m pytest -m "not slow"
+python -m pytest -m "not sysml"
 ```
 
-The default test gate excludes `slow`; the full suite is
-`python -m pytest`. See `docs/breakdown/04-verification/` for the test ladder
-and `AGENTS.md` for the contributor rules.
+The default gate is the SysML-free core suite; `tests/sysml/` carries the
+`sysml` marker, and the full suite is `python -m pytest`. See
+`docs/breakdown/04-verification/` for the test ladder and `AGENTS.md` for the
+contributor rules.
 
 ## Documentation
 

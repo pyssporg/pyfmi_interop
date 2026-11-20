@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Public `pyfmi_interop.core` contract: `ModelSpec` (the interface),
+  `BuildConfig` (serialization, role, prefix), `Compilation`, and
+  `compile_model` for generate-build-package in one call. `generate_model`,
+  `build_model`, and `package_fmu` are the individual stages.
+- SysML-free `examples/core/compile_model.py`, which drives `ModelSpec`
+  through `compile_model` without the `sysml` extra.
 - Reusable `PyfmiInterop` SysML library shipped as package data: a model can
   `import PyfmiInterop::*` to get the `FmuInterop :> FmuModel` base, its
   `InteropDeployment` initialization parameters, and `InteropMetadata`.
@@ -29,6 +35,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The Python layer is split into a SysML-free `core/` and a `sysml/` boundary.
+  `core/` holds `spec`, the IR, timing, wire, serialization, codegen, builder,
+  packaging, and `compile_model`; `sysml/` holds `parse`, `generate_adapter`,
+  the `pyfmi_sysml2` adapter layer, and the bundled definitions. The old import
+  paths (`pyfmi_interop.ir`, `.wire`, `.serialization`, `.codegen`, `.builder`,
+  `.packaging`, `.schema`, `.native`, `.roles`, `.timing`, `.psysml2`,
+  `.definitions`) remain as re-export-only compatibility facades.
+- SysML is parsed once: `parse` returns `ParsedModel(spec, architecture, unit,
+  composition)`, and `generate_adapter` consumes that handle instead of
+  reloading the source.
+- One FMI facade per artifact: the core emits the interop facade, and the
+  adapter takes its FMI interface, headers, and model description from
+  `pyfmi_sysml2`. Both export the same `fmi2*` ABI but never share a binary;
+  `generate_model` no longer takes `fmi_layer`.
+- Examples move to `examples/core/` and `examples/sysml/{adapter,system}/`.
+  Tests split into `tests/core/` and the `sysml`-marked `tests/sysml/`; the
+  default gate is `pytest -m "not sysml"`.
 - The adapter example inherits the shared `FmuInterop` base and
   `InteropDeployment` port instead of declaring them locally; it is now a
   direct FMU (`modelName="ActuatorLink"`).

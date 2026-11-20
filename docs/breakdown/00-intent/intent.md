@@ -30,9 +30,11 @@ model.
   renumbers the wire or moves the wire identity.
 - **Two ends:** a Python end and a C++ end meet at the byte layer and are
   tested against the same conformance vectors, so the format has one reading.
-- **The FMI layer is generated:** the C interface, the headers and the model
-  description come from the shared SysML-to-FMI generator; this repository
-  implements the model hooks and owns the wire plane. One FMI facade, not two.
+- **One FMI facade per artifact:** the core emits its own facade for the
+  realtime model, and the adapter takes its C interface, headers and model
+  description from the shared SysML-to-FMI generator. Both export the same
+  `fmi2*` ABI, so they never share a binary; this repository implements the
+  model hooks and owns the wire plane.
 - **Two registered seams:** serialization selects one schema authority per
   backend — protobuf canonical, `packed` second — while transports select
   loopback, UDP, or TCP by name at runtime. Framing stays single-authority and

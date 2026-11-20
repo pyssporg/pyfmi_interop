@@ -12,5 +12,5 @@ gate.
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with `pb registers`. -->
-- **TEST-001** [Test strategy](test-strategy.md) — Seven pytest markers grade the fault class; generated sources, the CMake build, and the packed FMU are the artifacts under test.
+- **TEST-001** [Test strategy](test-strategy.md) — Eight pytest markers grade the fault class; tests split into SysML-free core and marked SysML suites, with generated sources, the CMake build, and the packed FMU as the artifacts under test.
 <!-- pb:index:end -->

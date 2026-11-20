@@ -2,16 +2,21 @@
 id: INFO-007
 type: info
 title: FMI facade
-summary: The FMI 2.0 facade maps fmi2 functions onto one ModelRuntime and contains no model equations.
-date: 2026-11-19
+summary: Each artifact's FMI 2.0 facade maps fmi2 functions onto one ModelRuntime and contains no model equations; the core and the adapter never share a binary.
+date: 2026-11-20
 status: current
 ---
 
 # FMI facade
 
-The FMI 2.0 facade maps `fmi2*` entry points onto one `ModelRuntime` instance
-and contains no model equations.
+Each artifact's FMI 2.0 facade maps `fmi2*` entry points onto one `ModelRuntime`
+instance and contains no model equations.
 
+- **One facade per artifact:** the core emits the interop facade (checked-in
+  `fmi2_cs_api.cpp` plus `packaging.render_model_description`); the adapter
+  takes its interface, headers, and model description from `pyfmi_sysml2` and
+  links the runtime without whole-archive. Both export the same `fmi2*` ABI, so
+  they never share a binary.
 - **Create and destroy:** instantiation calls the generated
   `pyfmi_interop_create_model`; destruction releases it with the matching
   destroy function. Instantiation does not open a transport.

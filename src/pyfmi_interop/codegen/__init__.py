@@ -1,8 +1,6 @@
-"""C++ source generation for :mod:`pyfmi_interop`."""
+"""Compatibility facade for :mod:`pyfmi_interop.core.codegen`."""
 
 from __future__ import annotations
 
-from .cmake import render_cmake
-from .cpp import generate_model
-
-__all__ = ["generate_model", "render_cmake"]
+from ..core.codegen import *  # noqa: F401,F403
+from ..core.codegen import __all__  # noqa: F401

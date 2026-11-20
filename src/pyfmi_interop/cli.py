@@ -15,6 +15,7 @@ from pathlib import Path
 from . import __version__
 from .builder import build_model
 from .codegen import generate_model
+from .core import BuildConfig
 from .ir import ModelDefinition, model_from_dict
 from .packaging import package_fmu
 from .roles import ROLES
@@ -156,9 +157,7 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         target = generate_model(
             model,
             args.out,
-            serialization=args.serialization,
-            role=args.role,
-            sysml_includes=args.include,
+            BuildConfig(serialization=args.serialization, role=args.role),
         )
         print(f"Generated model sources at {target}")
         return 0

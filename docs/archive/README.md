@@ -19,3 +19,5 @@ Records live in the cold-storage archive; extract one with `pb archive read <ID>
   The adapter FMU takes its FMI C interface, headers and modelDescription from pyfmi_sysml2; pyfmi_interop implements the model hooks and owns the wire plane, with FMI value references and wire field numbers as separate namespaces.
 - **ID-004** — The adapter is step-free · accepted · 2026-11-19 · `ID-004`
   An adapter executes once per fmi2DoStep and never schedules, so step size leaves its wire identity, its model description and its build inputs; the realtime model keeps the fixed step.
+- **ID-005** — Core/SysML split, one parse, one FMI facade per artifact · accepted · 2026-11-20 · `ID-005`
+  The Python layer splits into a SysML-free core and a SysML boundary; ModelSpec and BuildConfig are the public contract, ModelDefinition stays internal, SysML is parsed once, and each artifact owns one FMI facade.

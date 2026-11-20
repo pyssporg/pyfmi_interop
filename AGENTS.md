@@ -32,8 +32,14 @@ C++17 realtime runtime, generates the adapter model that carries its interface
 on one versioned wire format, and packages the result as an FMI 2.0
 CoSimulation FMU.
 
-- The Python layer ingests SysML or IR JSON, emits C++, CMake, the wire
-  schema, and the adapter model, builds the native model, and packages the FMU.
+- The Python layer is split into a SysML-free `src/pyfmi_interop/core/`
+  (public `ModelSpec`/`BuildConfig`, IR, wire, serialization, codegen, build,
+  packaging, `compile_model`) and a `src/pyfmi_interop/sysml/` boundary
+  (`parse`, `generate_adapter`, the `pyfmi_sysml2` FMI layer, definitions). It
+  ingests SysML or IR JSON, emits C++, CMake, the wire schema, and the adapter
+  model, builds the native model, and packages the FMU.
+- SysML is parsed once: `parse` returns a `ParsedModel`, and
+  `generate_adapter` consumes that handle without reloading the source.
 - The C++ layer in `src/runtime/` owns the reusable `ModelRuntime` interface,
   the fixed-step scheduler, the wire codec, the serialization backends, and the
   `Transport` registry; the UDP and TCP backends live in `src/transport/`.
@@ -41,6 +47,9 @@ CoSimulation FMU.
   accessors, the `user_step` hook, and the factory
   `pyfmi_interop_create_model`. The generated adapter owns only the flow to
   and from the wire: no equations and no `user_step`.
+- One FMI facade per artifact: the core emits the interop facade, and the
+  adapter takes its facade from the shared SysML-to-FMI generator. Both export
+  the same `fmi2*` ABI, so they never share a binary.
 - Current state, contracts, and design rationale live in `docs/breakdown/`; the
   code is the source of truth only after the owning leaf has been updated.
 
@@ -48,17 +57,21 @@ CoSimulation FMU.
 
 - **One variable set, two namespaces.** The generated FMI interface owns the
   FMI value references — zero-based, declaration order, parameters included.
-  `src/pyfmi_interop/ir.py` is the wire and rate projection over the same
+  `src/pyfmi_interop/core/ir.py` is the wire and rate projection over the same
   signals: wire field numbers `1..n`, parameters excluded, canonical name
   order. Every wire generator, the builder and the packager read the IR; none
   re-derives wire numbering.
-- **One wire contract, one framing authority.** `src/pyfmi_interop/wire/` and
-  `src/runtime/src/wire.cpp` are the only framing implementations. Each
+- **One wire contract, one framing authority.** `src/pyfmi_interop/core/wire/`
+  and `src/runtime/src/wire.cpp` are the only framing implementations. Each
   serialization backend has exactly one schema emitter:
-  `src/pyfmi_interop/serialization/protobuf.py` for the canonical protobuf
-  payload (`schema.py` is its backwards-compatible facade) and the `packed`
+  `src/pyfmi_interop/core/serialization/protobuf.py` for the canonical protobuf
+  payload (`core/schema.py` is its backwards-compatible facade) and the `packed`
   backend for the packed layout. Both ends must reproduce the same conformance
   vectors; no protocol-specific branch grows elsewhere.
+- **One parse, one facade per artifact.** SysML is parsed once and
+  `generate_adapter` consumes the resulting `ParsedModel`; it never reloads the
+  source. Each artifact owns one FMI facade — the core its interop facade, the
+  adapter the `pyfmi_sysml2` generator's — and they never share a binary.
 - **Two registered seams.** Serialization is chosen when the adapter is
   generated, one emitter per backend; transports are chosen at run time by
   name — loopback, UDP, TCP. A name resolves to one backend, an unknown or
@@ -103,8 +116,8 @@ CoSimulation FMU.
 - Install: `python -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"`.
 - SysML ingestion: `pip install -e ".[sysml]"` in a workspace that provides
   `pycps-sysml2` and `pyfmi-sysml2`.
-- Tests: `python -m pytest -m "not slow"`; the default CI gate. Full suite:
-  `python -m pytest`.
+- Tests: `python -m pytest -m "not sysml"`; the default CI gate. Full suite:
+  `python -m pytest`; `slow` is an orthogonal qualifier for long native runs.
 - Lint: `ruff check src tests`.
 - Breakdown checks: `python3 <pb> check --strict --root docs/breakdown` and
   `python3 <pb> node-size --strict --root docs/breakdown`, where `<pb>` is the
