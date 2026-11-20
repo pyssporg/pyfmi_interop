@@ -13,11 +13,19 @@ below it knows the model's signals or equations.
 | --- | --- |
 | `src/pyfmi_interop/ir.py` | `ModelDefinition`, `Signal`, `RateGroup`, value-reference assignment, canonical JSON. |
 | `src/pyfmi_interop/sysml.py` | Ingestion through `pycps_sysml2` and `pyfmi_sysml2` into the IR. |
+| `src/pyfmi_interop/definitions/` | The bundled `PyfmiInterop` SysML vocabulary and the conditional include root. |
 | `src/pyfmi_interop/timing.py` | Rate and deadline validation, step alignment, and schedule construction. |
 | `src/pyfmi_interop/codegen/` | Emits the C++ source tree and the per-model `CMakeLists.txt`. |
 | `src/pyfmi_interop/builder.py` | Configures and runs the CMake build. |
 | `src/pyfmi_interop/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
 | `src/pyfmi_interop/cli.py` | The `pyfmi-interop` command surface. |
+
+A model may span packages: `load_model(includes=...)` and
+`generate_model(sysml_includes=...)` (CLI: repeatable `--include PATH`) pass the
+same extra roots to the IR load and to the `psysml2` reparse. Export selection
+stays leaf-only among `:> FmuModel` candidates, and imported definitions are
+selectable, so an app file that only imports a library exports the library's
+leaf under its bare name.
 
 ### C++ runtime layer
 
@@ -103,6 +111,14 @@ ModelDefinition IR ─► serializer ─► framing ─► transport
   name and resolved when the adapter runs. This is the deployment boundary:
   endpoints are instance parameters, never SSD/SSP content, so an SSP stays
   portable.
+
+The deployment parameter port is initialization-only configuration: its members
+are FMI `causality="parameter"`, `variability="fixed"`, writable before
+`fmi2EnterInitializationMode`, and never wire fields. Runtime behaviour belongs
+in `in` ports (FMI `causality="input"`), not parameters. `resources/transport.json`
+lists `queue_depth` and `deadline_s` among the recognised keys, but the C++
+runtime does not consume them; only `transport`, `bind_address`, and
+`peer_address` select the transport.
 
 One message carries the whole part definition: every input and output signal
 field of every port, numbered `1..n` in the canonical signal-name order, with

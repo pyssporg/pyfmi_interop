@@ -7,8 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reusable `PyfmiInterop` SysML library shipped as package data: a model can
+  `import PyfmiInterop::*` to get the `FmuInterop :> FmuModel` base, its
+  `InteropDeployment` initialization parameters, and `InteropMetadata`.
+- `interop_definitions()` returns the bundled library path, and both
+  `load_model` and the `psysml2` generation path include it automatically.
+- Multi-package SysML includes: `load_model(includes=...)`,
+  `generate_model(sysml_includes=...)`, and repeatable
+  `generate --include PATH` pass extra package roots to the IR load and the
+  `psysml2` reparse.
+- Library-defined FMUs are export units: a leaf an included package declares
+  can be selected, and a direct FMU is packaged under its bare name.
+- Multi-unit example `examples/system/`: `build_one.py` packages one selected
+  `FmuInterop` unit and `build_all.py` packages every unit `fmu_units()`
+  enumerates, one FMU each.
+- `load_architecture(source, includes=...)` returns the loaded `Architecture`,
+  and `load_model(..., composition=...)` / `model_from_architecture(...,
+  composition=...)` reduce one named unit. The CLI has no such selector.
+
 ### Changed
 
+- The adapter example inherits the shared `FmuInterop` base and
+  `InteropDeployment` port instead of declaring them locally; it is now a
+  direct FMU (`modelName="ActuatorLink"`).
 - Native sources live under `src/`: `runtime/` is `src/runtime/`, `transport/`
   is `src/transport/`, and the vendored FMI headers are `3rd_party/fmi2/`
   instead of `third_party/`. CMake, `setup.py`, the sdist manifest, and the

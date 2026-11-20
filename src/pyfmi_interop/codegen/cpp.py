@@ -19,6 +19,7 @@ the Python encoder only, and ``opaque`` emits no codec at all.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 
@@ -54,6 +55,7 @@ def generate_model(
     composition: str | None = None,
     component: str | None = None,
     prefix: str | None = None,
+    sysml_includes: Iterable[str | Path] = (),
 ) -> Path:
     """Write the complete C++ source tree for ``model`` into ``out_dir``.
 
@@ -65,7 +67,9 @@ def generate_model(
     FMI interface, headers and ``modelDescription.xml`` to ``pyfmi_sysml2``
     and supplies the model hooks here; it needs ``sysml_source=`` (a SysML path
     or an already loaded ``Architecture``) and cannot be used for a JSON
-    ``model.json`` input that has no architecture behind it.
+    ``model.json`` input that has no architecture behind it.  ``sysml_includes``
+    are the extra package roots the IR load used, so the ``psysml2`` reparse
+    selects the same export unit.
     """
 
     if fmi_layer == "psysml2":
@@ -80,6 +84,7 @@ def generate_model(
             composition=composition,
             component=component,
             prefix=prefix,
+            sysml_includes=sysml_includes,
         )
     if fmi_layer != "interop":
         raise ValueError(

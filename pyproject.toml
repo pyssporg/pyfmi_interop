@@ -64,6 +64,7 @@ pyfmi_interop = [
   "_runtime/*.lib",
   "_runtime/include/**/*.hpp",
   "_runtime/include/pyfmi_interop/transport/**/*.hpp",
+  "definitions/*.sysml",
 ]
 
 [tool.setuptools.dynamic]

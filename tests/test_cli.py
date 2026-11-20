@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 import pyfmi_interop
 from pyfmi_interop import cli
@@ -136,6 +139,80 @@ def test_sysml_generation_names_the_sysml_extra(tmp_path, capsys, monkeypatch):
     assert code == 1
     assert "sysml" in captured.err
     assert "extra" in captured.err
+
+
+def test_generate_with_sysml_includes_a_library_defined_fmu(tmp_path, capsys):
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+
+    library = tmp_path / "chain_library.sysml"
+    library.write_text(
+        "package ChainLibrary {\n"
+        "  private import ScalarValues::*;\n"
+        "\n"
+        "  port def Signal {\n"
+        "    attribute value : Real;\n"
+        "  }\n"
+        "\n"
+        "  part def FmuModel {\n"
+        "  }\n"
+        "\n"
+        "  part def FmuInterop :> FmuModel {\n"
+        "  }\n"
+        "\n"
+        "  part def Leaf :> FmuInterop {\n"
+        "    in port command : Signal;\n"
+        "    out port status : Signal;\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    app = tmp_path / "chain_app.sysml"
+    app.write_text(
+        "package ChainApp {\n"
+        "  private import ChainLibrary::*;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "generated"
+
+    code = cli.main(
+        [
+            "generate",
+            "--sysml",
+            str(app),
+            "--include",
+            str(library),
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    assert code == 0
+    assert "Generated model sources at" in capsys.readouterr().out
+    payload = json.loads((out_dir / "model.json").read_text(encoding="utf-8"))
+    assert payload["interface"] == "Leaf"
+    assert {item["name"] for item in payload["signals"]} == {"command", "status"}
+
+
+def test_include_requires_sysml(tmp_path, capsys):
+    path = write_fixture(tmp_path)
+
+    with pytest.raises(SystemExit) as error:
+        cli.main(
+            [
+                "generate",
+                "--model-json",
+                str(path),
+                "--include",
+                str(tmp_path / "library.sysml"),
+                "--out",
+                str(tmp_path / "generated"),
+            ]
+        )
+
+    assert error.value.code == 2
+    assert "--include" in capsys.readouterr().err
 
 
 def test_package_command(tmp_path, capsys):

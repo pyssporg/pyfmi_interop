@@ -4,9 +4,9 @@ The SysML dialect itself is owned by :mod:`pycps_sysml2`; the FMI variable
 reduction is owned by :mod:`pyfmi_sysml2.core`.  This module only maps
 that reduction onto :mod:`pyfmi_interop.ir`, so parsing is never
 re-implemented here.  Both packages are optional dependencies: importing this
-module works without them, calling :func:`load_model` or
-:func:`model_from_architecture` raises a :class:`RuntimeError` naming the
-``sysml`` extra when they are missing.
+module works without them, calling :func:`load_architecture`,
+:func:`load_model` or :func:`model_from_architecture` raises a
+:class:`RuntimeError` naming the ``sysml`` extra when they are missing.
 
 Timing attributes are read defensively from part and port definitions:
 
@@ -47,15 +47,17 @@ exactly the variable's authored ``start`` (or ``None``).
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
 from pyfmi_interop import ir
+from pyfmi_interop.definitions import load_with_interop
 
 __all__ = [
     "DEFAULT_STEP_SIZE_S",
     "DEFAULT_STRING_CAPACITY",
+    "load_architecture",
     "load_model",
     "model_from_architecture",
 ]
@@ -85,22 +87,50 @@ _STEP_KEYS = ("step_size_s", "step_size")
 _PERIOD_KEYS = ("period_s", "period")
 _RATE_KEYS = ("rate_hz", "rate")
 
+def load_architecture(
+    source: str | Path,
+    *,
+    includes: Iterable[str | Path] = (),
+) -> Any:
+    """Load a SysML v2 file or directory into an ``Architecture``.
+
+    ``includes`` are extra package roots (files or directories) merged into the
+    load, so a model can import a library that defines its FMU base or the
+    exported leaf itself.  The bundled ``PyfmiInterop`` library is added to the
+    roots only when the architecture imports it, exactly as in
+    :func:`load_model`.  Call this once to export several units from the same
+    parse, passing each name to :func:`model_from_architecture` as
+    ``composition=``.
+    """
+
+    pycps_sysml2, _, _ = _require_sysml()
+    return load_with_interop(source, pycps_sysml2.load, includes=includes)
+
+
 def load_model(
     source: str | Path,
     *,
+    includes: Iterable[str | Path] = (),
     name: str | None = None,
     step_size_s: float | None = None,
     realtime: bool = True,
+    composition: str | None = None,
 ) -> ir.ModelDefinition:
-    """Load a SysML v2 file or directory and reduce it onto the IR."""
+    """Load a SysML v2 file or directory and reduce it onto the IR.
 
-    pycps_sysml2, _, _ = _require_sysml()
-    architecture = pycps_sysml2.load(source)
+    ``includes`` are extra package roots (files or directories) merged into the
+    load, so a model can import a library that defines its FMU base or the
+    exported leaf itself.  ``composition`` names the part definition to export
+    when the architecture holds several export units.
+    """
+
+    architecture = load_architecture(source, includes=includes)
     return model_from_architecture(
         architecture,
         name=name,
         step_size_s=step_size_s,
         realtime=realtime,
+        composition=composition,
     )
 
 
@@ -110,21 +140,25 @@ def model_from_architecture(
     name: str | None = None,
     step_size_s: float | None = None,
     realtime: bool = True,
+    composition: str | None = None,
 ) -> ir.ModelDefinition:
     """Reduce an already loaded architecture onto the IR.
 
-    The model name defaults to the architecture's package name, sanitized to a
-    C identifier.  Passing ``name`` keeps it verbatim so an invalid name is
-    rejected by :class:`pyfmi_interop.ir.ModelDefinition` instead of being
-    silently rewritten.
+    ``composition`` selects the part definition whose components are exported;
+    without it the reduction picks the single ``:> FmuModel`` leaf, or asks for
+    a name when several leaves exist.  The model name defaults to the
+    architecture's package name, sanitized to a C identifier.  Passing ``name``
+    keeps it verbatim so an invalid name is rejected by
+    :class:`pyfmi_interop.ir.ModelDefinition` instead of being silently
+    rewritten.
     """
 
     _, components, resolve_system = _require_sysml()
 
-    model_name = _model_name(architecture, name, resolve_system)
-    system = _system_definition(architecture, resolve_system)
+    model_name = _model_name(architecture, name, resolve_system, composition)
+    system = _system_definition(architecture, resolve_system, composition)
     system_attributes = _attributes(system)
-    selected = components(architecture)
+    selected = components(architecture, composition=composition)
     step_size = _model_step_size(
         architecture, selected, system_attributes, step_size_s
     )
@@ -175,21 +209,28 @@ def _require_sysml():
 # -- architecture lookups --------------------------------------------------
 
 
-def _model_name(architecture: Any, name: str | None, resolve_system) -> str:
+def _model_name(
+    architecture: Any,
+    name: str | None,
+    resolve_system,
+    composition: str | None,
+) -> str:
     if name is not None:
         return name
     package_name = getattr(architecture, "package_name", None)
     if package_name:
         return _identifier(package_name)
-    system = _system_definition(architecture, resolve_system)
+    system = _system_definition(architecture, resolve_system, composition)
     if system is not None:
         return _identifier(system.name)
     return "model"
 
 
-def _system_definition(architecture: Any, resolve_system) -> Any | None:
+def _system_definition(
+    architecture: Any, resolve_system, composition: str | None
+) -> Any | None:
     try:
-        return resolve_system(architecture)
+        return resolve_system(architecture, composition)
     except (KeyError, ValueError):
         return None
 

@@ -40,7 +40,13 @@ packages.
 
 - **SysML v2** — a `.sysml` file, ingested through `sysml.py` and
   `pycps_sysml2` / `pyfmi_sysml2`. `--step-size` sets the base step for the
-  generated IR, and `--name` overrides the model name.
+  generated IR, and `--name` overrides the model name. Repeatable
+  `--include PATH` adds extra package roots, so an app that only imports a
+  library resolves the library's definitions and exports its leaf. The bundled
+  `PyfmiInterop` vocabulary is added to the load roots only when the model
+  imports it (`private import PyfmiInterop::*;`); a model that does not
+  import it sees no extra candidate. `from pyfmi_interop import
+  interop_definitions` returns the library path for tooling.
 - **IR JSON** — canonical `ModelDefinition` JSON, as written by `ir.py` and
   emitted as `<out>/model.json` next to every generated model. It carries the
   same fields the generator consumes after ingestion, so it is the direct path
@@ -67,6 +73,60 @@ pyfmi-interop generate --sysml examples/adapter/actuator_link.sysml \
 The CLI emits the realtime model. The checked-in adapter example loads the same
 SysML with `realtime=False` and packages the adapter `.fmu` instead; see
 `examples/adapter/README.md`.
+
+`--include PATH` is repeatable and adds a SysML package root (file or
+directory) to the load; it is valid only with `--sysml`. The Python API takes
+the same roots as `load_model(app, includes=[library])` and
+`generate_model(..., sysml_includes=[library])`, so the IR and the `psysml2`
+reparse select the same export unit.
+
+Export selection is leaf-only among `:> FmuModel` candidates: a shared base
+such as `FmuInterop :> FmuModel` is a role, not an FMU. Imported definitions
+are selectable, so a library-defined leaf is the export unit and a direct FMU
+is packaged under its bare name.
+
+The `pyfmi-interop generate` CLI exposes **no** `composition=` or
+`component=` option; it exports the single unit the loader selects and refuses
+an architecture with several candidates. Selecting a unit and exporting several
+units are Python-API workflows:
+
+- `load_architecture(source, includes=[...])` loads and returns the
+  `Architecture` once, with the same conditional `PyfmiInterop` include as
+  `load_model`.
+- `load_model(source, composition=NAME)` and
+  `model_from_architecture(arch, composition=NAME)` reduce exactly that part
+  definition, so each unit gets its own interface.
+- `pyfmi_sysml2.core.fmu_units(arch)` returns the sorted exportable
+  `:> FmuModel` leaves, the line-up for a one-FMU-per-unit loop.
+
+### Package one unit
+
+Use the Python API, as `examples/system/build_one.py` does. `--unit` may be
+omitted only when the architecture has exactly one unit; otherwise the script
+fails and lists the names.
+
+```bash
+python examples/system/build_one.py --unit Controller \
+  --sysml examples/system/bench.sysml --out build/examples/system/one \
+  --serialization packed
+```
+
+It writes `<out>/model`, `<out>/build`, and `<out>/<unit>.fmu`.
+
+### Package every unit
+
+`examples/system/build_all.py` enumerates `fmu_units(arch)` and runs the same
+generate/build/package step per unit. Each unit gets its own IR and FMU; units
+are never merged.
+
+```bash
+python examples/system/build_all.py --sysml examples/system/bench.sysml \
+  --out build/examples/system/all --serialization packed
+```
+
+It writes `<out>/<unit>/model`, `<out>/<unit>/build`, and
+`<out>/<unit>/<unit>.fmu`. Parameters stay initialization-only; runtime
+behaviour belongs in inputs.
 
 Generation emits a small C++17 project: `model_runtime.hpp`,
 `model_runtime.cpp`, `model_impl.hpp`, `bindings.cpp`, `model.json`, and
@@ -157,14 +217,20 @@ selects the backend and endpoint:
 A port of `0` asks the OS for an ephemeral port. A model that declares the
 parameter interface takes `transport`, `bind_address`, and `peer_address` from
 its FMI parameters; the environment is the fallback only when no parameter
-interface is declared. `PYFMI_INTEROP_TRANSPORT_ENDPOINT`
+interface is declared. Those parameters are initialization configuration,
+writable before `fmi2EnterInitializationMode` and never wire fields; runtime
+behaviour belongs in `in` ports (`causality="input"`), not parameters.
+`PYFMI_INTEROP_TRANSPORT_ENDPOINT`
 is the legacy suffix for a bare scheme name. The full grammar, framing, and
 validation rules are in `docs/wire.md`.
 
 `generate` writes `--serialization` into `model.json`; `package` reads it and
 bundles only that backend's artifacts. Every FMU also carries
-`resources/transport.json`, which documents the default transport and the
-`PYFMI_INTEROP_TRANSPORT` endpoint keys the C++ runtime reads.
+`resources/transport.json`, which documents the default transport, the
+parameter keys, and the `PYFMI_INTEROP_TRANSPORT` environment fallback.
+`queue_depth` and `deadline_s` are listed there among the recognised keys, but
+the C++ runtime does not consume them; only `transport`, `bind_address`, and
+`peer_address` affect the selected transport.
 
 ## Package
 
@@ -192,7 +258,7 @@ the built shared library. The library must exist and match the model name.
 | `pyfmi-interop inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
 | `pyfmi-interop schema --model-json PATH --out DIR [--serialization NAME]` | Emit the selected backend's schema bundle (`wire.json`, plus `<Model>.proto` for protobuf). |
 | `pyfmi-interop generate --model-json PATH --out DIR [--serialization NAME] [--role ROLE]` | Generate C++ from IR JSON. |
-| `pyfmi-interop generate --sysml PATH --out DIR [--step-size S] [--name NAME] [--serialization NAME] [--role ROLE]` | Generate C++ from SysML v2. |
+| `pyfmi-interop generate --sysml PATH --out DIR [--include PATH ...] [--step-size S] [--name NAME] [--serialization NAME] [--role ROLE]` | Generate C++ from SysML v2. |
 | `pyfmi-interop build DIR [--build-dir DIR]` | Configure and build a generated model with CMake. |
 | `pyfmi-interop package DIR --library PATH --out FILE.fmu` | Write the FMI 2.0 description and deterministic FMU archive. |
 

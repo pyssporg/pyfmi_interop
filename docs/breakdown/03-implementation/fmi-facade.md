@@ -17,8 +17,9 @@ and contains no model equations.
   destroy function. Instantiation does not open a transport.
 - **Initialization:** `fmi2EnterInitializationMode` opens the transport from the
   generated parameter members, so values written in the instantiated state are
-  visible. The runtime resolves parameter names per instance and never hardcodes
-  the parameter port name.
+  visible. Those parameters are initialization-only configuration, never wire
+  fields; runtime behaviour belongs in `in` ports. The runtime resolves
+  parameter names per instance and never hardcodes the parameter port name.
 - **Types:** real, integer, boolean, and string map to the IR and runtime
   `DataType`; the FMI ABI owns the pointer lifetimes.
 - **Causality:** inputs are writable, outputs readable, and parameters readable

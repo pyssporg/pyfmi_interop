@@ -32,10 +32,13 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
+from os import PathLike
 from pathlib import Path
 from typing import Any
 
+from .definitions import load_with_interop
 from .ir import DataType, Direction, ModelDefinition, Signal, fingerprint
 from .roles import resolve_role
 from .serialization import get as get_serialization
@@ -270,6 +273,27 @@ def adapter_from_architecture(
     )
 
 
+def _architecture_with_definitions(
+    helpers: dict[str, Any],
+    source: Any,
+    includes: Iterable[str | Path] = (),
+) -> Any:
+    """Re-parse a path with the same include roots :func:`sysml.load_model` uses.
+
+    ``generate_adapter_model`` re-loads the source to obtain the ``pyfmi_sysml2``
+    architecture.  Without the caller's ``includes`` and the bundled
+    ``PyfmiInterop`` root that load would not resolve a model importing a
+    library, so leaf selection and the exported identity would disagree with
+    the IR.  An already-loaded architecture is returned unchanged.
+    """
+
+    if not isinstance(source, (str, PathLike)):
+        return helpers["architecture"](source)
+    import pycps_sysml2
+
+    return load_with_interop(source, pycps_sysml2.load, includes=includes)
+
+
 def _select_component(components: list[Any], requested: str | None) -> Any:
     if requested is not None:
         for candidate in components:
@@ -468,8 +492,13 @@ def generate_adapter_model(
     composition: str | None = None,
     component: str | None = None,
     prefix: str | None = None,
+    sysml_includes: Iterable[str | Path] = (),
 ) -> Path:
-    """Write the adapter source tree with ``pyfmi_sysml2`` as the FMI layer."""
+    """Write the adapter source tree with ``pyfmi_sysml2`` as the FMI layer.
+
+    ``sysml_includes`` are the extra package roots used by the IR load, so the
+    reparse sees the same architecture the caller selected.
+    """
 
     helpers = _require_pyfmi_sysml2()
     if source is None:
@@ -477,7 +506,7 @@ def generate_adapter_model(
             'fmi_layer="psysml2" needs source= (a SysML path or Architecture); '
             "a JSON model.json input has no SysML architecture behind it"
         )
-    architecture = helpers["architecture"](source)
+    architecture = _architecture_with_definitions(helpers, source, sysml_includes)
     adapter = adapter_from_architecture(
         architecture,
         model,

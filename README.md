@@ -76,9 +76,43 @@ The example is `examples/adapter/actuator_link.sysml`: a part definition with
 the master owns the cadence. The script writes the generated sources, the build
 tree, and the `.fmu` under `build/examples/adapter/<serialization>/`.
 `--serialization packed` selects the dependency-free payload, and `--sysml`,
-`--name`, `--step-size`, and `--role` override the inputs; see
+`--include`, `--name`, `--step-size`, and `--role` override the inputs; see
 `examples/adapter/README.md`. Run `pyfmi-interop <command> --help` for the
 individual steps.
+
+## Shared SysML vocabulary
+
+The wheel ships the `PyfmiInterop` library as package data;
+`from pyfmi_interop import interop_definitions` returns its path. A model opts
+in with `private import PyfmiInterop::*;` and gets `FmuInterop :> FmuModel`
+(`interop_meta` plus the inherited `in port parameters : InteropDeployment;`)
+and the loopback/`127.0.0.1:5000` deployment defaults. `load_model` and the
+`psysml2` generation path add the library to the load roots only when the model
+imports `PyfmiInterop`, so a model that does not import it sees no extra
+candidate.
+
+A model may also live across packages: pass the library file or directory to
+`load_model(..., includes=[...])`, and repeat `--include PATH` on
+`pyfmi-interop generate --sysml ...`. The extra roots go to the IR load and to
+the `psysml2` reparse, so an app file that only imports a library still selects
+the library's exported leaf.
+
+`InteropMetadata` (`source`, `serialization`, `version`, all String) does not
+inherit `FmuMetadata`, and no generator consumes it yet; it does not change
+`modelDescription.xml` or the wire.
+
+Export selection is leaf-only among `:> FmuModel` candidates: a shared base such
+as `FmuInterop :> FmuModel` is a role, not an FMU. Imported definitions are
+selectable, so a library-defined leaf is the export unit and a direct FMU is
+packaged under its bare name. On the Python side, `composition=` can name a
+base explicitly, and the `psysml2` adapter API's `component=` selects among
+several exported leaves; the `pyfmi-interop` CLI exposes neither and exports
+the single unit the loader selects.
+
+Deployment parameters are initialization configuration: `InteropDeployment`
+members are FMI `causality="parameter"`, `variability="fixed"`, writable before
+`fmi2EnterInitializationMode`, and never wire fields. Runtime behaviour belongs
+in `in` ports (FMI `causality="input"`), not parameters.
 
 ## Wire format
 

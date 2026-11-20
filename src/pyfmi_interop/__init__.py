@@ -20,6 +20,7 @@ from typing import Any
 from . import builder, codegen, ir, native, packaging, roles, schema, serialization, wire
 from .builder import build_model
 from .codegen import generate_model
+from .definitions import interop_definitions
 from .ir import (
     DataType,
     Direction,
@@ -120,6 +121,7 @@ __all__ = [
     "encode_string",
     "fingerprint",
     "generate_model",
+    "interop_definitions",
     "ir",
     "model_from_dict",
     "model_id",

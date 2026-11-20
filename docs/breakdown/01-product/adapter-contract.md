@@ -22,9 +22,15 @@ A transport carries wire frames; it does not interpret the model interface.
   CLI lists the same names and the registry is authoritative at run time.
   Framing is the only contract this repository defines for them.
 - **Deployment:** a transport endpoint is resolved per instance from the
-  model's `parameter` interface (`transport`, `bind_address`, `peer_address`,
-  `queue_depth`, `deadline_s`) before initialization. The process environment
-  is consulted only when the model declares no parameter interface at all.
+  model's `parameter` interface (`transport`, `bind_address`, `peer_address`)
+  before initialization. The process environment is consulted only when the
+  model declares no parameter interface at all. `queue_depth` and `deadline_s`
+  are documented keys in `resources/transport.json` that the C++ runtime does
+  not consume.
+- **Initialization-only:** the parameter interface is configuration, not state:
+  FMI `causality="parameter"`, `variability="fixed"`, writable before
+  `fmi2EnterInitializationMode`, and never a wire field. Runtime behaviour
+  belongs in `in` ports (FMI `causality="input"`), not parameters.
 - **Failure:** an unknown transport name or parameter value is reported and
   makes initialization fail; there is no silent fallback to loopback or
   another backend.

@@ -80,6 +80,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Model name override (SysML input only).",
     )
+    generate_parser.add_argument(
+        "--include",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "Extra SysML package root merged into the load; repeatable "
+            "(SysML input only)."
+        ),
+    )
 
     build_parser_ = subparsers.add_parser(
         "build",
@@ -133,16 +144,21 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         _print_model(_load_model_json(args.model_json))
         return 0
     if args.command == "generate":
+        if args.model_json is not None and args.include:
+            parser.error("--include is only valid with --sysml")
         model = (
             _load_model_json(args.model_json)
             if args.model_json is not None
-            else _model_from_sysml(args.sysml, args.step_size, args.name)
+            else _model_from_sysml(
+                args.sysml, args.step_size, args.name, args.include
+            )
         )
         target = generate_model(
             model,
             args.out,
             serialization=args.serialization,
             role=args.role,
+            sysml_includes=args.include,
         )
         print(f"Generated model sources at {target}")
         return 0
@@ -181,6 +197,7 @@ def _model_from_sysml(
     path: Path,
     step_size: float | None,
     name: str | None,
+    includes: list[Path],
 ) -> ModelDefinition:
     try:
         from . import sysml
@@ -196,7 +213,7 @@ def _model_from_sysml(
             "pyfmi_interop.sysml does not provide load_model(); "
             "reinstall the 'sysml' extra"
         )
-    return builder(path, name=name, step_size_s=step_size)
+    return builder(path, name=name, step_size_s=step_size, includes=includes)
 
 
 def _print_transports() -> None:

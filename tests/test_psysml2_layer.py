@@ -14,7 +14,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from pyfmi_interop import generate_model, package_fmu
+from pyfmi_interop import Direction, generate_model, package_fmu
 from pyfmi_interop.packaging import platform_binary_dir
 from pyfmi_interop.psysml2 import (
     load_adapter_model,
@@ -26,6 +26,41 @@ pytestmark = [pytest.mark.cpp, pytest.mark.system]
 _EXAMPLE = (
     Path(__file__).resolve().parents[1] / "examples" / "adapter" / "actuator_link.sysml"
 )
+
+_CHAIN_LIBRARY = """\
+package ChainLibrary {
+  private import ScalarValues::*;
+
+  port def Signal {
+    attribute value : Real;
+  }
+
+  part def FmuModel {
+  }
+
+  part def FmuInterop :> FmuModel {
+  }
+
+  part def Leaf :> FmuInterop {
+    in port command : Signal;
+    out port status : Signal;
+  }
+}
+"""
+
+_CHAIN_APP = """\
+package ChainApp {
+  private import ChainLibrary::*;
+}
+"""
+
+
+def _write_chain(tmp_path: Path) -> tuple[Path, Path]:
+    library = tmp_path / "chain_library.sysml"
+    app = tmp_path / "chain_app.sysml"
+    library.write_text(_CHAIN_LIBRARY, encoding="utf-8")
+    app.write_text(_CHAIN_APP, encoding="utf-8")
+    return app, library
 
 
 @pytest.fixture(scope="module")
@@ -47,9 +82,131 @@ def _generate(model, out: Path, *, serialization: str = "packed", source=_EXAMPL
     )
 
 
+def test_example_uses_the_shared_interop_library(example, tmp_path):
+    text = _EXAMPLE.read_text(encoding="utf-8")
+
+    assert "private import PyfmiInterop::*;" in text
+    assert "part def ActuatorLink :> FmuInterop {" in text
+    assert "port def InteropDeployment" not in text
+    assert "part def FmuModel" not in text
+    assert "BenchDefaults" not in text
+    assert "part def Root" not in text
+
+    target = _generate(example, tmp_path)
+    payload = load_adapter_model(target)
+    assert payload["model_name"] == "ActuatorLink"
+
+
+def test_inline_model_importing_the_library_generates(tmp_path):
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    from pyfmi_interop import sysml
+
+    source = tmp_path / "inline.sysml"
+    source.write_text(
+        "package InlineInterop {\n"
+        "  private import ScalarValues::*;\n"
+        "  private import PyfmiInterop::*;\n"
+        "\n"
+        "  port def Command {\n"
+        "    attribute demand : Real;\n"
+        "  }\n"
+        "\n"
+        "  port def Status {\n"
+        "    attribute actual : Real;\n"
+        "  }\n"
+        "\n"
+        "  part def Widget :> FmuInterop {\n"
+        "    in port command : Command;\n"
+        "    out port status : Status;\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    model = sysml.load_model(source, name="WidgetAdapter", realtime=False)
+    target = _generate(model, tmp_path / "inline", source=source)
+    wire = json.loads((target / "wire.json").read_text(encoding="utf-8"))
+    description = (target / "Widget" / "modelDescription.xml").read_text(
+        encoding="utf-8"
+    )
+
+    assert model.interface == "Widget"
+    assert {item["name"] for item in wire["parameters"]} == {
+        "transport",
+        "bind_address",
+        "peer_address",
+    }
+    assert {item["name"] for item in wire["signals"]} == {
+        "command.demand",
+        "status.actual",
+    }
+    assert 'modelName="Widget"' in description
+
+
 def test_fmi_layer_requires_a_sysml_source(example, tmp_path):
     with pytest.raises(ValueError, match="source="):
         generate_model(example, tmp_path, fmi_layer="psysml2")
+
+
+@pytest.mark.component
+def test_library_defined_fmu_loads_and_generates_from_includes(tmp_path):
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    from pyfmi_interop import sysml
+
+    app, library = _write_chain(tmp_path)
+    model = sysml.load_model(app, includes=[library], realtime=False)
+
+    assert model.interface == "Leaf"
+    assert {item.name: item.direction for item in model.signals} == {
+        "command": Direction.INPUT,
+        "status": Direction.OUTPUT,
+    }
+
+    target = generate_model(
+        model,
+        tmp_path / "generated",
+        serialization="packed",
+        fmi_layer="psysml2",
+        sysml_source=app,
+        sysml_includes=[library],
+    )
+    document = (target / "Leaf" / "modelDescription.xml").read_text(encoding="utf-8")
+    payload = load_adapter_model(target)
+
+    assert 'modelName="Leaf"' in document
+    assert payload["model_name"] == "Leaf"
+    assert {item["name"] for item in payload["signals"] if item["field"] is not None} == {
+        "command",
+        "status",
+    }
+
+
+@pytest.mark.component
+def test_model_without_includes_is_unchanged(example, tmp_path):
+    plain = _generate(example, tmp_path / "plain")
+    empty = generate_model(
+        example,
+        tmp_path / "empty",
+        serialization="packed",
+        fmi_layer="psysml2",
+        sysml_source=_EXAMPLE,
+        sysml_includes=(),
+    )
+
+    plain_files = sorted(
+        path.relative_to(plain) for path in plain.rglob("*") if path.is_file()
+    )
+    empty_files = sorted(
+        path.relative_to(empty) for path in empty.rglob("*") if path.is_file()
+    )
+    assert plain_files == empty_files
+    for name in plain_files:
+        assert (plain / name).read_bytes() == (empty / name).read_bytes(), str(name)
+    document = (plain / "ActuatorLink" / "modelDescription.xml").read_text(
+        encoding="utf-8"
+    )
+    assert 'modelName="ActuatorLink"' in document
 
 
 def test_tree_carries_both_namespaces_per_signal(example, tmp_path):
@@ -62,7 +219,6 @@ def test_tree_carries_both_namespaces_per_signal(example, tmp_path):
         "transport",
         "bind_address",
         "peer_address",
-        "queue_depth",
     }
     wire_signals = wire["signals"]
     assert [item["field"] for item in wire_signals] == list(
@@ -106,10 +262,18 @@ def test_parameter_addition_moves_vrs_not_fields_or_model_id(tmp_path):
     from pyfmi_interop import sysml
 
     original = _EXAMPLE.read_text(encoding="utf-8")
+    # A derived deployment interface adds a parameter while keeping the shared
+    # InteropDeployment fields; the part points its parameters port at it.
     extended = original.replace(
-        '    attribute queue_depth : Integer = 8;',
-        '    attribute queue_depth : Integer = 8;\n'
-        '    attribute protocol : String = "v1";',
+        "  port def Command {",
+        "  port def ExtendedDeployment :> InteropDeployment {\n"
+        '    attribute protocol : String = "v1";\n'
+        "  }\n\n"
+        "  port def Command {",
+    ).replace(
+        "  part def ActuatorLink :> FmuInterop {",
+        "  part def ActuatorLink :> FmuInterop {\n"
+        "    in port parameters : ExtendedDeployment;",
     )
     assert extended != original
 
@@ -132,7 +296,9 @@ def test_parameter_addition_moves_vrs_not_fields_or_model_id(tmp_path):
     assert [item["value_reference"] for item in wire_a["signals"]] != [
         item["value_reference"] for item in wire_b["signals"]
     ]
-    assert "protocol" in {item["name"] for item in wire_b["parameters"]}
+    assert any(
+        item["name"].endswith("protocol") for item in wire_b["parameters"]
+    )
 
 
 def test_protobuf_schema_uses_wire_field_numbers(example, tmp_path):
@@ -199,8 +365,11 @@ def test_packaged_archive_uses_the_sysml2_model_description(example, tmp_path):
         descriptor = json.loads(
             archive.read(f"binaries/{platform}/wire.json").decode("utf-8")
         )
-    assert 'modelName="Root.ActuatorLink"' in document
+    assert 'modelName="ActuatorLink"' in document
+    assert 'modelName="Root.ActuatorLink"' not in document
     assert 'modelIdentifier="ActuatorLink"' in document
+    guid = re.search(r'guid="([^"]+)"', document).group(1)
+    assert guid == _direct_guid("ActuatorLink")
     assert {"value_reference", "field"} <= set(descriptor["signals"][0])
 
 
@@ -225,8 +394,8 @@ def test_adapter_model_id_ignores_step_size_and_declared_rates(tmp_path):
         "  attribute def BuildTiming;\n\n"
         "  port def Command {",
     ).replace(
-        "  part def ActuatorLink {",
-        "  part def ActuatorLink {\n"
+        "  part def ActuatorLink :> FmuInterop {",
+        "  part def ActuatorLink :> FmuInterop {\n"
         "    attribute step_size_s : BuildTiming = 0.002;",
     )
     rated_text = original.replace(
@@ -248,12 +417,12 @@ def test_adapter_model_id_ignores_step_size_and_declared_rates(tmp_path):
 def test_adapter_document_has_no_default_experiment(tmp_path):
     original = _EXAMPLE.read_text(encoding="utf-8")
     text = original.replace(
-        "  part def Root {",
+        "  part def ActuatorLink :> FmuInterop {",
         "  attribute def AdapterDefaults :> DefaultExperiment {\n"
         "    attribute startTime = 0.0;\n"
         "    attribute stopTime = 1.0;\n"
         "  }\n\n"
-        "  part def Root {\n"
+        "  part def ActuatorLink :> FmuInterop {\n"
         "    attribute defaults : AdapterDefaults;",
     )
     assert text != original
@@ -296,7 +465,135 @@ def test_adapter_generates_without_a_step_size(tmp_path):
     assert (target / "wire.json").is_file()
 
 
+def _direct_guid(component: str) -> str:
+    from pyfmi_sysml2.core.identity import component_guid
+
+    return component_guid("ActuatorLinkExample", component, direct=True)
+
+
 def _extension() -> str:
     from pyfmi_interop.packaging import platform_library_extension
 
     return platform_library_extension()
+
+
+_SYSTEM_EXAMPLE = (
+    Path(__file__).resolve().parents[1] / "examples" / "system" / "bench.sysml"
+)
+
+_SYSTEM_UNITS = ["ActuatorLink", "Controller", "SensorLink"]
+
+
+def _system_architecture():
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    from pyfmi_interop.sysml import load_architecture
+
+    return load_architecture(_SYSTEM_EXAMPLE)
+
+
+def _generate_unit(architecture, unit: str, out: Path, *, serialization="packed"):
+    from pyfmi_interop.sysml import model_from_architecture
+
+    model = model_from_architecture(
+        architecture,
+        composition=unit,
+        name=unit,
+        realtime=False,
+    )
+    target = generate_model(
+        model,
+        out,
+        serialization=serialization,
+        fmi_layer="psysml2",
+        sysml_source=architecture,
+        composition=unit,
+    )
+    return model, target
+
+
+def test_fmu_units_lists_the_three_system_units_sorted():
+    architecture = _system_architecture()
+    from pyfmi_sysml2.core import fmu_units
+
+    assert [definition.name for definition in fmu_units(architecture)] == _SYSTEM_UNITS
+
+
+def test_load_model_composition_selects_only_that_units_signals():
+    pytest.importorskip("pycps_sysml2")
+    pytest.importorskip("pyfmi_sysml2")
+    from pyfmi_interop import sysml
+
+    model = sysml.load_model(
+        _SYSTEM_EXAMPLE,
+        composition="Controller",
+        name="Controller",
+        realtime=False,
+    )
+
+    assert model.interface == "Controller"
+    assert {
+        signal.name
+        for signal in model.signals
+        if signal.direction is not Direction.PARAMETER
+    } == {
+        "input.measured",
+        "input.reference",
+        "input.mode",
+        "input.enabled",
+        "input.weights[0]",
+        "input.weights[1]",
+        "input.weights[2]",
+        "output.command",
+        "output.effort",
+        "output.phase",
+        "output.active",
+        "output.limits[0]",
+        "output.limits[1]",
+    }
+
+
+def test_generate_one_unit_names_the_model_after_the_unit(tmp_path):
+    architecture = _system_architecture()
+    model, target = _generate_unit(architecture, "SensorLink", tmp_path / "one")
+
+    document = (target / "SensorLink" / "modelDescription.xml").read_text(
+        encoding="utf-8"
+    )
+    payload = load_adapter_model(target)
+
+    assert model.name == "SensorLink"
+    assert model.interface == "SensorLink"
+    assert 'modelName="SensorLink"' in document
+    assert payload["model_name"] == "SensorLink"
+    assert {
+        item["name"] for item in payload["signals"] if item["field"] is not None
+    } == {
+        "request.sample_rate",
+        "request.channel",
+        "request.trigger",
+        "request.offsets[0]",
+        "request.offsets[1]",
+        "reading.measurement",
+        "reading.count",
+        "reading.valid",
+        "reading.window[0]",
+        "reading.window[1]",
+        "reading.window[2]",
+        "reading.window[3]",
+    }
+
+
+def test_generate_all_units_writes_one_model_per_unit(tmp_path):
+    architecture = _system_architecture()
+    destinations = []
+
+    for unit in _SYSTEM_UNITS:
+        _, target = _generate_unit(architecture, unit, tmp_path / unit)
+        destination = target / unit / "modelDescription.xml"
+        assert destination.is_file()
+        assert f'modelName="{unit}"' in destination.read_text(encoding="utf-8")
+        destinations.append(destination.parent.name)
+
+    assert destinations == _SYSTEM_UNITS
+    assert sorted(path.name for path in tmp_path.iterdir()) == _SYSTEM_UNITS

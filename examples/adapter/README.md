@@ -5,20 +5,34 @@ Python — load, generate, build, package — with no CLI and no IR JSON.
 
 ## What the SysML says
 
-`actuator_link.sysml` defines one package, three port definitions, one part
-definition, one parameter set, and the composition root:
+`actuator_link.sysml` defines one package with two port definitions and one
+part definition, and imports the shared `PyfmiInterop` library with
+`private import PyfmiInterop::*;`. `from pyfmi_interop import
+interop_definitions` returns the same library path for tooling, and the loader
+adds it to the load roots only when that import is present.
+
+Its ports are:
 
 | Port | Direction on the part | Fields |
 | --- | --- | --- |
 | `Command` | `in` | `setpoint : Real`, `mode : Integer`, `enable : Boolean`, `gains : Real[3]` |
 | `Feedback` | `out` | `position : Real`, `status : Integer`, `healthy : Boolean`, `samples : Real[2]` |
-| `InteropDeployment` | parameter interface | `transport`, `bind_address`, `peer_address`, `queue_depth` |
+| `InteropDeployment` | parameter interface (inherited) | `transport`, `bind_address`, `peer_address` |
 
-`part def ActuatorLink` owns `in port command : Command;`,
-`out port feedback : Feedback;`, and `in port parameters : InteropDeployment;`.
-`part def Root` is the composition root that makes `ActuatorLink` the exported
-component and binds the partial `BenchDefaults :> ParameterSet` to
-`link.parameters`.
+`part def ActuatorLink :> FmuInterop` owns `in port command : Command;` and
+`out port feedback : Feedback;`. The shared base supplies `interop_meta` and
+`in port parameters : InteropDeployment;`, whose defaults are the loopback
+bench configuration (`transport = "loopback"`,
+`bind_address = "127.0.0.1:5000"`, empty peer). `ActuatorLink` is the only
+`:> FmuModel` leaf, so it is the export unit itself: the FMI `modelName` is
+the bare `ActuatorLink`, not `Root.ActuatorLink`, and the GUID uses the
+direct-FMU scope without a composition level. The same rule exports a library
+leaf under its bare name when the library is supplied as an include root.
+
+The example no longer keeps a `Root`/`BenchDefaults` composition: binding a
+`ParameterSet` to the deployment port did not change the exported FMI
+defaults (the authored `InteropDeployment` values still won), so it was dead
+configuration rather than a demonstration.
 
 A port field with fixed multiplicity is not an FMI array — FMI 2.0 has no array
 variable — so it becomes one scalar variable per element. `command.gains[0..2]`
@@ -30,14 +44,21 @@ separate `ScalarVariable` entries in `modelDescription.xml`.
 | Class | Examples | Where it lives | On the wire? |
 | --- | --- | --- | --- |
 | Build-time attribute | serialization backend, derived role (`step_size_s` belongs to the realtime model, not the adapter) | authored/generated into the build; changing it requires a rebuild | no |
-| Deployment parameter | `transport`, `bind_address`, `peer_address`, `queue_depth`, `deadline_s` | FMI `causality="parameter"`, `variability="fixed"` with an authored `start` | never |
+| Deployment parameter | `transport`, `bind_address`, `peer_address` (`queue_depth` and `deadline_s` are documented keys the runtime does not consume) | FMI `causality="parameter"`, `variability="fixed"` with an authored `start` | never |
 | Derived | value reference, field number, wire direction, model id | computed from the interface by the generators | yes (model id is in the envelope header) |
 
-Parameters are configuration, not wire fields. They are omitted from the
-payload schema, from the packed layout, and from the `model_id` digest; the
+Parameters are initialization-only configuration, not wire fields: they are
+writable before `fmi2EnterInitializationMode`, fixed afterwards, and omitted
+from the payload schema, the packed layout, and the `model_id` digest; the
 `psysml2` descriptor records them in a separate `parameters` list rather than
-in `signals`. The remaining INPUT/OUTPUT fields keep the value references they
-were assigned, and each wire field number stays equal to its value reference.
+in `signals`. Runtime behaviour belongs in `in` ports (FMI
+`causality="input"`), not parameters. The remaining INPUT/OUTPUT fields keep
+the value references they were assigned, and each wire field number stays equal
+to its value reference.
+
+`resources/transport.json` lists `queue_depth` and `deadline_s` among the
+recognised keys, but the C++ runtime does not consume them; only `transport`,
+`bind_address`, and `peer_address` select the transport.
 
 ## Wire direction is the inverse of FMI causality
 
@@ -85,8 +106,6 @@ matching setter *before* `fmi2EnterInitializationMode`:
 fmi2SetString(component, transport_vr, 1, (const fmi2String[]){"udp"});
 fmi2SetString(component, bind_vr, 1, (const fmi2String[]){"127.0.0.1:5000"});
 fmi2SetString(component, peer_vr, 1, (const fmi2String[]){"127.0.0.1:5001"});
-/* queue_depth is an Integer parameter. */
-fmi2SetInteger(component, queue_depth_vr, 1, (const fmi2Integer[]){8});
 
 fmi2EnterInitializationMode(component);   /* the transport is opened here */
 fmi2ExitInitializationMode(component);
