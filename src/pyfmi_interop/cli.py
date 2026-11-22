@@ -54,9 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
         "generate",
         help="Generate the C++ source tree for a model.",
     )
-    source = generate_parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--model-json", type=Path, help="Path to a model.json IR file.")
-    source.add_argument("--sysml", type=Path, help="Path to a SysML v2 architecture file.")
+    generate_parser.add_argument(
+        "--model-json",
+        type=Path,
+        required=True,
+        help="Path to a model.json IR file.",
+    )
     generate_parser.add_argument("--out", type=Path, required=True)
     generate_parser.add_argument(
         "--serialization",
@@ -70,29 +73,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Narrow the role derived from FMI causality.",
     )
-    generate_parser.add_argument(
-        "--step-size",
-        type=float,
-        default=None,
-        help="Base step size in seconds (SysML input only).",
-    )
-    generate_parser.add_argument(
-        "--name",
-        default=None,
-        help="Model name override (SysML input only).",
-    )
-    generate_parser.add_argument(
-        "--include",
-        type=Path,
-        action="append",
-        default=[],
-        metavar="PATH",
-        help=(
-            "Extra SysML package root merged into the load; repeatable "
-            "(SysML input only)."
-        ),
-    )
-
     build_parser_ = subparsers.add_parser(
         "build",
         help="Build a generated model source tree.",
@@ -145,15 +125,7 @@ def _dispatch(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         _print_model(_load_model_json(args.model_json))
         return 0
     if args.command == "generate":
-        if args.model_json is not None and args.include:
-            parser.error("--include is only valid with --sysml")
-        model = (
-            _load_model_json(args.model_json)
-            if args.model_json is not None
-            else _model_from_sysml(
-                args.sysml, args.step_size, args.name, args.include
-            )
-        )
+        model = _load_model_json(args.model_json)
         target = generate_model(
             model,
             args.out,
@@ -190,29 +162,6 @@ def _load_model_json(path: Path) -> ModelDefinition:
         raise FileNotFoundError(f"model JSON does not exist: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     return model_from_dict(payload)
-
-
-def _model_from_sysml(
-    path: Path,
-    step_size: float | None,
-    name: str | None,
-    includes: list[Path],
-) -> ModelDefinition:
-    try:
-        from . import sysml
-    except ImportError as error:
-        raise RuntimeError(
-            "SysML ingestion is unavailable; install the 'sysml' extra with "
-            "'pip install pyfmi-interop[sysml]'"
-        ) from error
-
-    builder = getattr(sysml, "load_model", None)
-    if builder is None:
-        raise RuntimeError(
-            "pyfmi_interop.sysml does not provide load_model(); "
-            "reinstall the 'sysml' extra"
-        )
-    return builder(path, name=name, step_size_s=step_size, includes=includes)
 
 
 def _print_transports() -> None:

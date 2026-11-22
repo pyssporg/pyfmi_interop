@@ -11,7 +11,7 @@ status: implemented
 
 **Question:** can one `Reduction` be the only hand-off from pyfmi_sysml2, so the adapter reduces once and never re-resolves the export unit?
 
-- **Evidence:** pyfmi_sysml2 publishes a parser-free `Reduction` — components, identity, package, experiment — and every generator accepts it, with a seam test proving a generator runs without the dialect (`INFO-007`).
+- **Evidence:** pyfmi_interfaces publishes a parser-free `Reduction` — components, identity, package, experiment — and every generator accepts it, with a seam test proving a generator runs without the dialect (`INFO-007`).
 - **Evidence:** pyfmi_interop still re-resolves the unit and re-runs reduction per generator, so "one reduction" is unproven; the parsed handle stores the architecture only.
 - **Evidence:** `Variable.start` became formatted `start_text`, so the adapter now reads no authored default: on the adapter example 14 of 14 signals lost their initial value while the reduction retained `loopback`, `127.0.0.1:5000`, `0`, and `false`.
 - **Evidence:** the declared sysml dependency pins a release older than the split; only the workspace editable install exercises the new API.

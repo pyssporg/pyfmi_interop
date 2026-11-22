@@ -9,8 +9,8 @@ below it knows the model's signals or equations.
 
 ### Python generation layer
 
-The Python layer is split at the SysML boundary into `core/` (SysML-free) and
-`sysml/` (ingestion and the adapter's FMI layer).
+The Python layer is SysML-free and lives in `core/`; SysML ingestion is a
+separate composition layer (`pyfmi_sysml`) in another repository.
 
 | Module | Responsibility |
 | --- | --- |
@@ -21,28 +21,19 @@ The Python layer is split at the SysML boundary into `core/` (SysML-free) and
 | `src/pyfmi_interop/core/builder.py` | Configures and runs the CMake build. |
 | `src/pyfmi_interop/core/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
 | `src/pyfmi_interop/core/pipeline.py` | `Compilation` and `compile_model`: generate, build, package in one call. |
-| `src/pyfmi_interop/sysml/parse.py` | One parse through `pycps_sysml2`, one reduction through `pyfmi_sysml2`; returns the parser-free `ParsedModel(spec, reduction, unit)`. |
-| `src/pyfmi_interop/sysml/generate.py` | `generate_adapter(parsed, out_dir, config)`; never reloads the source. |
-| `src/pyfmi_interop/sysml/adapter.py` | `adapter_from_reduction(reduction, model, ...)`: the `pyfmi_sysml2` FMI layer for the adapter artifact. |
-| `src/pyfmi_interop/sysml/definitions/` | The bundled `PyfmiInterop` SysML vocabulary. |
+| `src/pyfmi_interop/core/adapter.py` | `adapter_from_reduction(reduction, model, ...)` and the adapter model: the `pyfmi_interfaces` FMI layer, `wire.json`, schema, hooks, and CMake. |
 | `src/pyfmi_interop/cli.py` | The `pyfmi-interop` command surface. |
 
 `core/` imports no SysML package. The old import paths (`pyfmi_interop.ir`,
 `.wire`, `.serialization`, `.codegen`, `.builder`, `.packaging`, `.schema`,
-`.native`, `.roles`, `.timing`, `.psysml2`, `.definitions`) remain as
-re-export-only compatibility facades.
+`.native`, `.roles`, `.timing`) remain as re-export-only compatibility facades.
 
-A model may span packages: `load_model(includes=...)` and
-`parse(..., includes=...)` (CLI: repeatable `--include PATH`) pass the same
-extra roots to the single load. Export selection stays leaf-only among
-`:> FmuModel` candidates, and imported definitions are selectable, so an app
-file that only imports a library exports the library's leaf under its bare
-name.
-
-SysML is parsed exactly once: `parse` loads the architecture, reduces it once,
-and returns the specification and the parser-free `Reduction` together;
-`generate_adapter` consumes that `ParsedModel` rather than reloading the file
-or re-resolving the export unit.
+SysML is parsed exactly once, outside this repository: `pyfmi_sysml.parse`
+loads the architecture, reduces it once, and returns the specification and the
+parser-free `Reduction` together; `pyfmi_sysml.generate_adapter` consumes that
+`ParsedModel` and calls `core.adapter.adapter_from_reduction` rather than
+reloading the file or re-resolving the export unit. Export selection, package
+includes, and the `PyfmiInterop` vocabulary belong to that composition layer.
 
 ### C++ runtime layer
 
@@ -85,7 +76,7 @@ corresponding wire direction, but carries no `user_step` and no equations.
 Each artifact owns one FMI facade. The core emits the interop facade
 (checked-in `src/runtime/src/fmi2_cs_api.cpp` plus
 `core/packaging.render_model_description`); the adapter takes its FMI interface,
-headers, and model description from `pyfmi_sysml2` and links the runtime
+headers, and model description from `pyfmi_interfaces` and links the runtime
 without whole-archive. Both export the same `fmi2*` ABI, so they never share a
 binary.
 
@@ -100,9 +91,9 @@ both native archives must be built with CMake before `python -m build`.
 ## Data flow
 
 ```text
-SysML v2 (.sysml) ─► sysml/parse.py ─► ModelSpec ─┐
+IR JSON (model.json) ─► ModelDefinition ──────────┐
                                                   ├─► core/codegen/ ─► C++ + CMakeLists.txt
-IR JSON (model.json) ─► ModelDefinition ──────────┘            │
+ModelSpec (Python API) ───────────────────────────┘            │
                                                                ▼
                                                 core/builder.py ─► CMake ─► model library
                                                                │
@@ -111,7 +102,7 @@ IR JSON (model.json) ─► ModelDefinition ──────────┘   
 ```
 
 `ModelSpec` projects onto the internal `ModelDefinition`, the only hand-off
-between ingestion, codegen, and packaging. Each downstream stage reads the same
+between the interface specification, codegen, and packaging. Each downstream stage reads the same
 signal order and value references, so the generated header, the runtime
 accessors, and the FMI variables cannot disagree.
 

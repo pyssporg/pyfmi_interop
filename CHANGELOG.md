@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-11-22
+
+### Changed
+
+- `pyfmi_interop` is SysML-free: it takes IR JSON or a `ModelSpec` and emits the
+  realtime model, the adapter, and the FMU. SysML ingestion, the parse-once
+  `ParsedModel` hand-off, export selection, package includes, and the
+  `PyfmiInterop` vocabulary moved to `pyfmi-sysml`.
+- `pyfmi-interfaces` is a normal runtime dependency (the adapter's FMI layer).
+- The adapter model moved verbatim to `pyfmi_interop.core.adapter` and is
+  exported from `pyfmi_interop.core`.
+
+### Removed
+
+- The `sysml/` subpackage, the `psysml2` compatibility module, and the
+  `definitions` facade (`interop_definitions`, `load_with_interop`).
+- The `--sysml`, `--include`, `--step-size`, and `--name` CLI options, the
+  `[sysml]` extra, and every SysML test in this repository.
 
 ### Added
 

@@ -4,7 +4,5 @@ include pyproject.toml
 include setup.py
 recursive-include src/runtime/include *.hpp
 recursive-include src/transport/include *.hpp
-recursive-include src/pyfmi_interop/definitions *.sysml
-recursive-include src/pyfmi_interop/sysml/definitions *.sysml
 recursive-include cmake *.cmake
 recursive-include 3rd_party *

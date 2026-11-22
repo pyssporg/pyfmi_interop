@@ -27,20 +27,20 @@ become. It is the first document to read, not a reference of last resort.
 
 ## Repository Focus
 
-`pyfmi_interop` turns a SysML v2 definition of an FMU into an optimized
-C++17 realtime runtime, generates the adapter model that carries its interface
-on one versioned wire format, and packages the result as an FMI 2.0
-CoSimulation FMU.
+`pyfmi_interop` turns an interface specification of an FMU — IR JSON or a
+`ModelSpec` — into an optimized C++17 realtime runtime, generates the adapter
+model that carries its interface on one versioned wire format, and packages the
+result as an FMI 2.0 CoSimulation FMU. It is SysML-free.
 
-- The Python layer is split into a SysML-free `src/pyfmi_interop/core/`
-  (public `ModelSpec`/`BuildConfig`, IR, wire, serialization, codegen, build,
-  packaging, `compile_model`) and a `src/pyfmi_interop/sysml/` boundary
-  (`parse`, `generate_adapter`, the `pyfmi_sysml2` FMI layer, definitions). It
-  ingests SysML or IR JSON, emits C++, CMake, the wire schema, and the adapter
-  model, builds the native model, and packages the FMU.
-- SysML is parsed once: `parse` returns a `ParsedModel` carrying a parser-free
-  `Reduction`, and `generate_adapter` consumes that handle without reloading the
-  source or re-resolving the export unit.
+- The Python layer is a SysML-free `src/pyfmi_interop/core/` (public
+  `ModelSpec`/`BuildConfig`, IR, wire, serialization, codegen, build, packaging,
+  `compile_model`). It takes IR JSON or a `ModelSpec`, emits C++, CMake, the
+  wire schema, and the adapter model, builds the native model, and packages the
+  FMU.
+- SysML ingestion lives in the separate `pyfmi_sysml` composition layer: it
+  loads through `pycps_sysml2`, reduces once to a parser-free `Reduction`, maps
+  it to `ModelSpec`, and calls the interop generator; interop never parses SysML
+  and never re-resolves the export unit.
 - The C++ layer in `src/runtime/` owns the reusable `ModelRuntime` interface,
   the fixed-step scheduler, the wire codec, the serialization backends, and the
   `Transport` registry; the UDP and TCP backends live in `src/transport/`.
@@ -49,8 +49,9 @@ CoSimulation FMU.
   `pyfmi_interop_create_model`. The generated adapter owns only the flow to
   and from the wire: no equations and no `user_step`.
 - One FMI facade per artifact: the core emits the interop facade, and the
-  adapter takes its facade from the shared SysML-to-FMI generator. Both export
-  the same `fmi2*` ABI, so they never share a binary.
+  adapter takes its facade from the shared FMI interface model and emitters in
+  `pyfmi_interfaces`. Both export the same `fmi2*` ABI, so they never share a
+  binary.
 - Current state, contracts, and design rationale live in `docs/breakdown/`; the
   code is the source of truth only after the owning leaf has been updated.
 
@@ -69,11 +70,12 @@ CoSimulation FMU.
   payload (`core/schema.py` is its backwards-compatible facade) and the `packed`
   backend for the packed layout. Both ends must reproduce the same conformance
   vectors; no protocol-specific branch grows elsewhere.
-- **One parse, one facade per artifact.** SysML is parsed once and
-  `generate_adapter` consumes the resulting `ParsedModel`; it never reloads the
-  source or re-resolves the export unit. Each artifact owns one FMI facade — the
-  core its interop facade, the adapter the `pyfmi_sysml2` generator's — and they
-  never share a binary.
+- **One specification in, artifacts out.** The input is IR JSON or a
+  `ModelSpec`. SysML is parsed and reduced to a parser-free `Reduction` once in
+  `pyfmi_sysml`, which calls `generate_adapter` with the resulting
+  `ParsedModel`; interop never loads a source or re-resolves the export unit.
+  Each artifact owns one FMI facade — the core its interop facade, the adapter
+  the `pyfmi_interfaces` generator's — and they never share a binary.
 - **Two registered seams.** Serialization is chosen when the adapter is
   generated, one emitter per backend; transports are chosen at run time by
   name — loopback, UDP, TCP. A name resolves to one backend, an unknown or
@@ -91,8 +93,9 @@ CoSimulation FMU.
   `model_impl.hpp` for the interop-owned facade, `<stem>_model.cpp` for the
   generated FMI layer — which is write-if-absent and is where model behaviour
   belongs.
-- **No model equations, no master algorithm.** SysML defines the interface, not
-  the equations; `user_step` is the only place model behaviour is written, and
+- **No model equations, no master algorithm.** The interface specification
+  defines the interface, not the equations; `user_step` is the only place model
+  behaviour is written, and
   the runtime is a slave, not a co-simulation master. The adapter model carries
   values and nothing else: no equations, no `user_step`.
 
@@ -116,9 +119,11 @@ CoSimulation FMU.
   `cmake --build build`.
 - Native tests: `ctest --test-dir build --output-on-failure`.
 - Install: `python -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"`.
-- SysML ingestion: `pip install -e ".[sysml]"` in a workspace that provides
-  `pycps-sysml2` and `pyfmi-sysml2`.
-- Tests: `python -m pytest -m "not sysml"`; the default CI gate. Full suite:
+- SysML ingestion lives outside this repository: install `pyfmi-sysml` from its
+  checkout in a workspace that provides `pycps-sysml2` and `pyfmi-interfaces`.
+  There is no `[sysml]` extra and no `--sysml` flag here.
+- Tests: `python -m pytest -m "not sysml"`; the default CI gate. The `sysml`
+  marker stays declared for suites that opt into it. Full suite:
   `python -m pytest`; `slow` is an orthogonal qualifier for long native runs.
 - Lint: `ruff check src tests`.
 - Breakdown checks: `python3 <pb> check --strict --root docs/breakdown` and

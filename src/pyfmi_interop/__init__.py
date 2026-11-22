@@ -7,9 +7,8 @@ The public surface is the IR (:mod:`pyfmi_interop.ir`), the wire envelope
 (:mod:`pyfmi_interop.builder`), the FMU packager
 (:mod:`pyfmi_interop.packaging`), and the ``pyfmi-interop`` CLI.
 
-``timing`` and ``sysml`` are imported lazily: the SysML ingestion path depends
-on optional packages, and importing them must not make the runtime/codegen path
-unusable.
+The package is SysML-free: it takes IR JSON or a ``ModelSpec``. SysML
+ingestion lives in a separate composition layer. ``timing`` is imported lazily.
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ from . import builder, codegen, ir, native, packaging, roles, schema, serializat
 from .builder import build_model
 from .codegen import generate_model
 from .core import BuildConfig, Compilation, ModelSpec, compile_model
-from .definitions import interop_definitions
 from .ir import (
     DataType,
     Direction,
@@ -73,11 +71,9 @@ from .wire import (
     model_id,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 _LAZY_MODULES = {
-    "psysml2": ".psysml2",
-    "sysml": ".sysml",
     "timing": ".timing",
 }
 
@@ -126,7 +122,6 @@ __all__ = [
     "encode_string",
     "fingerprint",
     "generate_model",
-    "interop_definitions",
     "ir",
     "model_from_dict",
     "model_id",
@@ -134,7 +129,6 @@ __all__ = [
     "native",
     "package_fmu",
     "packaging",
-    "psysml2",
     "render_proto",
     "render_wire_json",
     "resolve_role",
@@ -142,7 +136,6 @@ __all__ = [
     "schema",
     "schema_entries",
     "serialization",
-    "sysml",
     "timing",
     "wire",
     "write_model_json",

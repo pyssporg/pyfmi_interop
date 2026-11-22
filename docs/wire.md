@@ -309,8 +309,7 @@ generated codec returns that backend's format id: `protobuf` → `1`, `packed` �
 `2`, `opaque` → `0`. No environment variable selects the serializer. On the
 legacy `interop` FMI layer the CMake wire mode (`PYFMI_INTEROP_WIRE`) still
 gates whether the protobuf codec translation unit is compiled; the generated
-`psysml2` adapter compiles the codec its backend emits and does not depend on
-that mode.
+adapter compiles the codec its backend emits and does not depend on that mode.
 
 `fmi2DoStep` then runs:
 
@@ -345,7 +344,7 @@ same 8-byte id the envelope carries), step size when the model has one, role,
 list. The legacy `interop` layer orders signals by `(value_reference, name)`
 and writes each entry as `{id, name, field, wire, data_type, direction,
 rate_hz, unit, capacity}` plus `rate_groups`; `id` is the FMI value reference.
-The `psysml2` adapter layer orders signals by name with fields `1..n` and
+The adapter layer orders signals by name with fields `1..n` and
 writes each entry as `{field, value_reference, name, wire, data_type,
 direction, rate_hz, unit, capacity}` plus a separate `parameters` list,
 because parameters are FMI variables without wire fields.
@@ -425,7 +424,7 @@ libprotobuf and `protoc`; selecting it without them is a configure error rather
 than a silent fallback. `raw` is fully supported and keeps the envelope
 payload-agnostic: caller bytes are carried unchanged with payload format `0`.
 This mode governs the native runtime and the legacy `interop` FMI layer; the
-`psysml2` adapter selects its codec at generation with `--serialization`
+adapter selects its codec at generation with `--serialization`
 (`protobuf`, `packed`, or `opaque`) and does not branch on the mode.
 
 ### Build both modes

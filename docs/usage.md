@@ -1,8 +1,9 @@
 # Usage
 
-`pyfmi-interop` turns a SysML v2 model or an IR JSON file into generated
-C++17 sources, builds them with CMake, and packages the result as an FMI 2.0
-CoSimulation FMU.
+`pyfmi-interop` turns an interface specification — IR JSON or a `ModelSpec` —
+into generated C++17 sources, builds them with CMake, and packages the result as
+an FMI 2.0 CoSimulation FMU. It is SysML-free; SysML ingestion is the separate
+`pyfmi-sysml` composition layer.
 
 ## Install
 
@@ -23,39 +24,25 @@ carries the prebuilt static runtime and transport archives plus the public
 headers and `wire.cmake`; it cannot be built without the native archives in
 `build/runtime/`.
 
-SysML ingestion needs the optional dialect packages:
-
-```bash
-pip install -e ".[sysml]"
-```
-
-In the pyssp workspace those packages are installed editable from the sibling
-checkouts rather than resolved from an index. IR JSON input needs no SysML
-packages.
+`pyfmi-interfaces` is a runtime dependency for the adapter FMI layer. There is
+no `[sysml]` extra: SysML ingestion, its dialect packages, and the vocabulary
+are installed with `pyfmi-sysml` from its own checkout.
 
 ## Inputs
 
-`generate` accepts either a SysML v2 source or an IR JSON file, selected by
-`--sysml` or `--model-json`.
+`generate` accepts an IR JSON file through `--model-json`; that is the only CLI
+input.
 
-- **SysML v2** — a `.sysml` file, ingested through `sysml/parse.py` and
-  `pycps_sysml2` / `pyfmi_sysml2`. `--step-size` sets the base step for the
-  generated IR, and `--name` overrides the model name. Repeatable
-  `--include PATH` adds extra package roots, so an app that only imports a
-  library resolves the library's definitions and exports its leaf. The bundled
-  `PyfmiInterop` vocabulary is added to the load roots only when the model
-  imports it (`private import PyfmiInterop::*;`); a model that does not
-  import it sees no extra candidate. `from pyfmi_interop import
-  interop_definitions` returns the library path for tooling.
 - **IR JSON** — the canonical `ModelDefinition` JSON, as written by
   `core/ir.py` and emitted as `<out>/model.json` next to every generated model.
   `model.json` is the internal build manifest, not a separate public schema; it
-  carries the same fields the generator consumes after ingestion, so it is the
-  direct path for tests and for tools that build the IR themselves.
+  carries the same fields the generator consumes, so it is the direct path for
+  tests and for tools that build the IR themselves.
+- **SysML v2** — ingested by `pyfmi_sysml`, which parses once, maps the
+  parser-free reduction to a `ModelSpec`, and calls the interop generator. The
+  CLI here has no `--sysml`, `--include`, or `--step-size`.
 
-The checked-in SysML example that drives the same pipeline through the Python
-API (parse, generate, build, package) is `examples/sysml/adapter/`; see its
-README. `examples/core/compile_model.py` is the SysML-free counterpart.
+`examples/core/compile_model.py` drives the `ModelSpec` pipeline from Python.
 
 `inspect` and `schema` take IR JSON only. Generate writes the IR to
 `<out>/model.json`; inspect that file to validate the model and see the
@@ -79,86 +66,46 @@ result = compile_model(spec, "build/demo",
                        config=BuildConfig(serialization="packed"))
 ```
 
-SysML is parsed once. `parse(source)` returns a `ParsedModel` carrying the
-specification and a parser-free `Reduction`; pass that handle to
-`generate_adapter`, which never reloads the source or re-resolves the export
-unit:
+`generate_model(spec, out_dir, config)` emits the interop facade for the
+realtime model. The adapter model and its `pyfmi_interfaces` facade live in
+`pyfmi_interop.core.adapter`; a composition layer builds it from a parser-free
+`Reduction`:
 
 ```python
-from pyfmi_interop.sysml import generate_adapter, parse
+from pyfmi_interop.core import BuildConfig, adapter_from_reduction
 
-parsed = parse("model.sysml", realtime=False)
-generate_adapter(parsed, "build/adapter", BuildConfig(serialization="protobuf"))
+adapter = adapter_from_reduction(
+    reduction,
+    spec.to_model(BuildConfig(serialization="protobuf")),
+    component=unit,
+    serialization="protobuf",
+)
 ```
 
-`generate_model(spec, out_dir, config)` emits the interop facade for the
-realtime model; `generate_adapter(parsed, out_dir, config)` takes the adapter's
-facade from `pyfmi_sysml2`. Both export the same `fmi2*` ABI but never share a
-binary.
+`pyfmi_sysml` wraps that as `parse(source)` then
+`generate_adapter(parsed, out_dir, config)`, never reloading the source or
+re-resolving the export unit. Both artifacts export the same `fmi2*` ABI but
+never share a binary.
 
 ## Generate
 
 ```bash
-pyfmi-interop generate --sysml examples/sysml/adapter/actuator_link.sysml \
-  --name ActuatorLink --out build/actuator_link
+pyfmi-interop generate --model-json model.json --out build/model
+pyfmi-interop build build/model --build-dir build/model-build
+pyfmi-interop package build/model --library <library> --out demo.fmu
 ```
 
-The CLI emits the realtime model. The checked-in adapter example loads the same
-SysML with `realtime=False` and packages the adapter `.fmu` instead; see
-`examples/sysml/adapter/README.md`.
+The CLI emits the realtime model. The adapter is a Python-API or
+`pyfmi_sysml` workflow: the composition layer parses the source, selects the
+export unit, and calls `generate_adapter`, which takes the adapter's facade from
+`pyfmi_interfaces`.
 
-`--include PATH` is repeatable and adds a SysML package root (file or
-directory) to the load; it is valid only with `--sysml`. The Python API takes
-the same roots as `load_model(app, includes=[library])` and
-`parse(app, includes=[library])`; one load selects the export unit.
-
-Export selection is leaf-only among `:> FmuModel` candidates: a shared base
-such as `FmuInterop :> FmuModel` is a role, not an FMU. Imported definitions
-are selectable, so a library-defined leaf is the export unit and a direct FMU
-is packaged under its bare name.
-
-The `pyfmi-interop generate` CLI exposes **no** `composition=` or
-`component=` option; it exports the single unit the loader selects and refuses
-an architecture with several candidates. Selecting a unit and exporting several
-units are Python-API workflows:
-
-- `load_architecture(source, includes=[...])` loads and returns the
-  `Architecture` once, with the same conditional `PyfmiInterop` include as
-  `load_model`.
-- `load_model(source, composition=NAME)` and
-  `model_from_architecture(arch, composition=NAME)` reduce exactly that part
-  definition, so each unit gets its own interface.
-- `pyfmi_sysml2.core.fmu_units(arch)` returns the sorted exportable
-  `:> FmuModel` leaves, the line-up for a one-FMU-per-unit loop.
-
-### Package one unit
-
-Use the Python API, as `examples/sysml/system/build_one.py` does. `--unit` may be
-omitted only when the architecture has exactly one unit; otherwise the script
-fails and lists the names.
-
-```bash
-python examples/sysml/system/build_one.py --unit Controller \
-  --sysml examples/sysml/system/bench.sysml --out build/examples/sysml/system/one \
-  --serialization packed
-```
-
-It writes `<out>/model`, `<out>/build`, and `<out>/<unit>.fmu`.
-
-### Package every unit
-
-`examples/sysml/system/build_all.py` enumerates `fmu_units(arch)` and runs the same
-generate/build/package step per unit. Each unit gets its own IR and FMU; units
-are never merged.
-
-```bash
-python examples/sysml/system/build_all.py --sysml examples/sysml/system/bench.sysml \
-  --out build/examples/sysml/system/all --serialization packed
-```
-
-It writes `<out>/<unit>/model`, `<out>/<unit>/build`, and
-`<out>/<unit>/<unit>.fmu`. Parameters stay initialization-only; runtime
-behaviour belongs in inputs.
+Export selection is leaf-only among `:> FmuModel` candidates: a shared base such
+as `FmuInterop :> FmuModel` is a role, not an FMU. Imported definitions are
+selectable, so a library-defined leaf is the export unit and a direct FMU is
+packaged under its bare name. `composition=`, `includes=`, `load_architecture`,
+`fmu_units`, and the one-or-all-unit examples all live in `pyfmi_sysml`; see
+its documentation.
 
 Generation emits a small C++17 project: `model_runtime.hpp`,
 `model_runtime.cpp`, `model_impl.hpp`, `bindings.cpp`, `model.json`, and
@@ -290,7 +237,6 @@ the built shared library. The library must exist and match the model name.
 | `pyfmi-interop inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
 | `pyfmi-interop schema --model-json PATH --out DIR [--serialization NAME]` | Emit the selected backend's schema bundle (`wire.json`, plus `<Model>.proto` for protobuf). |
 | `pyfmi-interop generate --model-json PATH --out DIR [--serialization NAME] [--role ROLE]` | Generate C++ from IR JSON. |
-| `pyfmi-interop generate --sysml PATH --out DIR [--include PATH ...] [--step-size S] [--name NAME] [--serialization NAME] [--role ROLE]` | Generate C++ from SysML v2. |
 | `pyfmi-interop build DIR [--build-dir DIR]` | Configure and build a generated model with CMake. |
 | `pyfmi-interop package DIR --library PATH --out FILE.fmu` | Write the FMI 2.0 description and deterministic FMU archive. |
 
@@ -327,7 +273,8 @@ ruff check src tests
 python -m pytest -m "not sysml"
 ```
 
-`python -m pytest` runs the full suite, including the `sysml`-marked
-ingestion and end-to-end tests. CI runs the SysML-free core subset on Python
-3.11 and 3.12 after building the runtime. `slow` remains an orthogonal
-qualifier for long native runs.
+`python -m pytest` runs the full suite. The `sysml` marker stays declared for
+suites that opt into it, though this repository no longer ships SysML tests.
+CI runs `-m "not sysml"` on Python 3.11 and 3.12 after building the runtime;
+`slow` remains an orthogonal qualifier for long native runs. The moved SysML
+ingestion and end-to-end tests live in `pyfmi_sysml`.

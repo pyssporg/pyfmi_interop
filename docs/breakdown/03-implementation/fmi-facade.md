@@ -14,9 +14,10 @@ instance and contains no model equations.
 
 - **One facade per artifact:** the core emits the interop facade (checked-in
   `fmi2_cs_api.cpp` plus `packaging.render_model_description`); the adapter
-  takes its interface, headers, and model description from `pyfmi_sysml2` and
-  links the runtime without whole-archive. Both export the same `fmi2*` ABI, so
-  they never share a binary.
+  generator in `pyfmi_interop.core.adapter` takes its interface, headers, and
+  model description from `pyfmi_interfaces` and links the runtime without
+  whole-archive. `pyfmi_sysml.generate_adapter` calls it from the composition
+  layer. Both export the same `fmi2*` ABI, so they never share a binary.
 - **Create and destroy:** instantiation calls the generated
   `pyfmi_interop_create_model`; destruction releases it with the matching
   destroy function. Instantiation does not open a transport.

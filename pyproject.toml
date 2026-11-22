@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pyfmi-interop"
 dynamic = ["version"]
-description = "Turn SysML v2 FMU definitions into C++ realtime runtimes and one versioned wire format."
+description = "Turn an FMU interface specification into C++ realtime runtimes and one versioned wire format."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -16,7 +16,6 @@ authors = [
 keywords = [
   "fmi",
   "fmu",
-    "sysml-v2",
     "realtime",
     "protobuf",
     "wire-format",
@@ -31,16 +30,11 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering",
 ]
-dependencies = []
+dependencies = [
+    "pyfmi-interfaces>=0.5.1",
+]
 
 [project.optional-dependencies]
-# SysML ingestion is optional so the runtime/codegen path can be installed and
-# tested without the SysML dialect packages.  Inside the pyssp workspace they
-# are installed editable from the checkout, which shadows these release pins.
-sysml = [
-  "pycps-sysml2 @ https://github.com/pyssporg/pycps_sysml2/releases/download/v0.3.0/pycps_sysml2-0.3.0-py3-none-any.whl",
-  "pyfmi-sysml2 @ https://github.com/pyssporg/pyfmi_sysml2/releases/download/v0.4.0/pyfmi_sysml2-0.4.0-py3-none-any.whl",
-]
 dev = [
   "pytest>=8",
   "ruff>=0.6",
@@ -64,10 +58,6 @@ pyfmi_interop = [
   "_runtime/*.lib",
   "_runtime/include/**/*.hpp",
   "_runtime/include/pyfmi_interop/transport/**/*.hpp",
-  "definitions/*.sysml",
-]
-"pyfmi_interop.sysml" = [
-  "definitions/*.sysml",
 ]
 
 [tool.setuptools.dynamic]
@@ -95,6 +85,6 @@ markers = [
   "contract: two directions must agree (IR round-trip, generated/runtime ABI)",
   "system: the CLI and the native build are driven end to end",
   "cpp: requires a working C++ toolchain and CMake",
-  "sysml: requires the optional SysML ingestion packages",
+  "sysml: reserved for suites that opt into SysML ingestion",
   "slow: not part of the default CI subset",
 ]
