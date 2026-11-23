@@ -169,8 +169,11 @@ std::string resolve_transport_uri(const ModelRuntime* model, std::string& error)
     return uri;
 }
 
-bool parameter_is_fixed(const InstanceState* instance,
-                        fmi2ValueReference value_reference) {
+// Fixed parameters are writable in the instantiated state and in
+// Initialization Mode; only leaving Initialization Mode (or terminating) locks
+// them.
+bool parameter_is_locked(const InstanceState* instance,
+                         fmi2ValueReference value_reference) {
     if (instance == nullptr || instance->model == nullptr) {
         return false;
     }
@@ -181,8 +184,7 @@ bool parameter_is_fixed(const InstanceState* instance,
         if (signal.direction != Direction::Parameter) {
             return false;
         }
-        return instance->in_initialization_mode || instance->initialized ||
-               instance->terminated;
+        return instance->initialized || instance->terminated;
     }
     return false;
 }
@@ -292,7 +294,7 @@ fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuType,
             "pyfmi_interop: the model has a transport role but no wire model id");
     }
 
-    // The transport is opened in fmi2EnterInitializationMode, after the master
+    // The transport is opened in fmi2ExitInitializationMode, after the master
     // has written the parameter values that configure it.
 
     return instance;
@@ -338,32 +340,6 @@ fmi2Status fmi2EnterInitializationMode(fmi2Component c) {
         return fmi2Error;
     }
 
-    if (instance->role != TransportRole::None) {
-        if (instance->transport) {
-            instance->transport->finalize();
-            instance->transport.reset();
-        }
-
-        std::string uri_error;
-        const std::string uri = resolve_transport_uri(instance->model, uri_error);
-        if (uri.empty()) {
-            return report_error(
-                instance, "fmi2EnterInitializationMode: " +
-                              (uri_error.empty()
-                                   ? std::string("no transport URI configured")
-                                   : uri_error));
-        }
-
-        try {
-            std::unique_ptr<Transport> transport = pyfmi_interop::make_transport(uri);
-            transport->initialize(uri);
-            instance->transport = std::move(transport);
-        } catch (const std::exception& error) {
-            return report_error(instance, "fmi2EnterInitializationMode: transport '" +
-                                              uri + "' failed: " + error.what());
-        }
-    }
-
     instance->in_initialization_mode = true;
     instance->current_time = instance->start_time;
     return fmi2OK;
@@ -374,6 +350,33 @@ fmi2Status fmi2ExitInitializationMode(fmi2Component c) {
     if (instance == nullptr) {
         return fmi2Error;
     }
+
+    if (instance->role != TransportRole::None) {
+        if (instance->transport) {
+            instance->transport->finalize();
+            instance->transport.reset();
+        }
+
+        std::string uri_error;
+        const std::string uri = resolve_transport_uri(instance->model, uri_error);
+        if (uri.empty()) {
+            return report_error(
+                instance, "fmi2ExitInitializationMode: " +
+                              (uri_error.empty()
+                                   ? std::string("no transport URI configured")
+                                   : uri_error));
+        }
+
+        try {
+            std::unique_ptr<Transport> transport = pyfmi_interop::make_transport(uri);
+            transport->initialize(uri);
+            instance->transport = std::move(transport);
+        } catch (const std::exception& error) {
+            return report_error(instance, "fmi2ExitInitializationMode: transport '" +
+                                              uri + "' failed: " + error.what());
+        }
+    }
+
     instance->in_initialization_mode = false;
     instance->initialized = true;
     instance->terminated = false;
@@ -515,10 +518,10 @@ fmi2Status fmi2SetReal(fmi2Component c, const fmi2ValueReference vr[], size_t nv
     }
 
     for (size_t index = 0; index < nvr; ++index) {
-        if (parameter_is_fixed(instance, vr[index])) {
+        if (parameter_is_locked(instance, vr[index])) {
             return report_error(instance, "fmi2SetReal: parameter value reference " +
                                               std::to_string(vr[index]) +
-                                              " is fixed after initialization");
+                                              " is fixed after initialization mode");
         }
         if (!instance->model->write(vr[index], Value::make_real(value[index]))) {
             return report_error(instance, "fmi2SetReal: value reference " +
@@ -537,10 +540,10 @@ fmi2Status fmi2SetInteger(fmi2Component c, const fmi2ValueReference vr[], size_t
     }
 
     for (size_t index = 0; index < nvr; ++index) {
-        if (parameter_is_fixed(instance, vr[index])) {
+        if (parameter_is_locked(instance, vr[index])) {
             return report_error(instance, "fmi2SetInteger: parameter value reference " +
                                               std::to_string(vr[index]) +
-                                              " is fixed after initialization");
+                                              " is fixed after initialization mode");
         }
         if (!instance->model->write(
                 vr[index], Value::make_integer(static_cast<std::int32_t>(value[index])))) {
@@ -560,10 +563,10 @@ fmi2Status fmi2SetBoolean(fmi2Component c, const fmi2ValueReference vr[], size_t
     }
 
     for (size_t index = 0; index < nvr; ++index) {
-        if (parameter_is_fixed(instance, vr[index])) {
+        if (parameter_is_locked(instance, vr[index])) {
             return report_error(instance, "fmi2SetBoolean: parameter value reference " +
                                               std::to_string(vr[index]) +
-                                              " is fixed after initialization");
+                                              " is fixed after initialization mode");
         }
         if (!instance->model->write(vr[index],
                                     Value::make_boolean(value[index] == fmi2True))) {
@@ -587,10 +590,10 @@ fmi2Status fmi2SetString(fmi2Component c, const fmi2ValueReference vr[], size_t 
             return report_error(instance, "fmi2SetString: null string at index " +
                                               std::to_string(index));
         }
-        if (parameter_is_fixed(instance, vr[index])) {
+        if (parameter_is_locked(instance, vr[index])) {
             return report_error(instance, "fmi2SetString: parameter value reference " +
                                               std::to_string(vr[index]) +
-                                              " is fixed after initialization");
+                                              " is fixed after initialization mode");
         }
         if (!instance->model->write(vr[index], Value::make_string(value[index]))) {
             return report_error(instance, "fmi2SetString: value reference " +

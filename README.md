@@ -107,9 +107,10 @@ component=...)` selects among several exported leaves through
 options and consumes IR JSON only.
 
 Deployment parameters are initialization configuration: `InteropDeployment`
-members are FMI `causality="parameter"`, `variability="fixed"`, writable before
-`fmi2EnterInitializationMode`, and never wire fields. Runtime behaviour belongs
-in `in` ports (FMI `causality="input"`), not parameters.
+members are FMI `causality="parameter"`, `variability="fixed"`, and never wire
+fields; the write window is stated once in the byte-transport contract
+(`docs/breakdown/01-product/adapter-contract.md`). Runtime behaviour belongs in
+`in` ports (FMI `causality="input"`), not parameters.
 
 ## Wire format
 

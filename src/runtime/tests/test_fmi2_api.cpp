@@ -92,6 +92,8 @@ public:
             {"mode", 4, DataType::String, Direction::Output, 0.0, 16},
             {"command", 5, DataType::Real, Direction::Input, 0.0, 0},
             {"setpoint", 6, DataType::Integer, Direction::Input, 0.0, 0},
+            {"gain", 7, DataType::Real, Direction::Parameter, 0.0, 0},
+            {"transport", 8, DataType::String, Direction::Parameter, 0.0, 16},
         };
         reset();
     }
@@ -107,6 +109,8 @@ public:
         mode_ = "auto";
         command_ = 0.0;
         setpoint_ = 0;
+        gain_ = 2.0;
+        transport_ = "loopback";
         steps_ = 0;
         last_time_ = 0.0;
     }
@@ -139,6 +143,12 @@ public:
             case 6:
                 out = Value::make_integer(setpoint_);
                 return true;
+            case 7:
+                out = Value::make_real(gain_);
+                return true;
+            case 8:
+                out = Value::make_string(transport_.c_str());
+                return true;
             default:
                 return false;
         }
@@ -157,6 +167,18 @@ public:
                     return false;
                 }
                 setpoint_ = value.integer_value;
+                return true;
+            case 7:
+                if (value.type != DataType::Real) {
+                    return false;
+                }
+                gain_ = value.real_value;
+                return true;
+            case 8:
+                if (value.type != DataType::String) {
+                    return false;
+                }
+                transport_ = value.string_value;
                 return true;
             default:
                 return false;  // Outputs are not writable.
@@ -203,6 +225,20 @@ public:
         return TransportRole::None;
     }
 
+    const char* interop_parameter_string(const char* name,
+                                         std::size_t* length) const override {
+        if (name != nullptr && std::strcmp(name, "transport") == 0) {
+            if (length != nullptr) {
+                *length = transport_.size();
+            }
+            return transport_.c_str();
+        }
+        if (length != nullptr) {
+            *length = 0;
+        }
+        return nullptr;
+    }
+
     pyfmi_interop::wire::PayloadFormat payload_format() const override {
         return pyfmi_interop::wire::PayloadFormat::Opaque;
     }
@@ -247,6 +283,8 @@ private:
     std::string mode_;
     double command_ = 0.0;
     std::int32_t setpoint_ = 0;
+    double gain_ = 0.0;
+    std::string transport_;
     std::uint64_t steps_ = 0;
     double last_time_ = 0.0;
 };
@@ -315,10 +353,36 @@ int main() {
         return fail("setDebugLogging");
     }
 
+    // Fixed parameters are writable in the instantiated state and during
+    // Initialization Mode; leaving Initialization Mode locks them (FMI 2.0.1).
+    const fmi2ValueReference gain_vr[] = {7};
+    const fmi2Real gain_value[] = {3.0};
+    const fmi2ValueReference transport_vr[] = {8};
+    const fmi2String transport_value[] = {"udp"};
+    if (fmi2SetReal(component, gain_vr, 1, gain_value) != fmi2OK ||
+        fmi2SetString(component, transport_vr, 1, transport_value) != fmi2OK) {
+        return fail("set fixed parameter in the instantiated state");
+    }
+
     if (fmi2SetupExperiment(component, fmi2False, 0.0, 1.0, fmi2False, 0.0) != fmi2OK ||
-        fmi2EnterInitializationMode(component) != fmi2OK ||
-        fmi2ExitInitializationMode(component) != fmi2OK) {
+        fmi2EnterInitializationMode(component) != fmi2OK) {
         return fail("initialization sequence");
+    }
+    if (fmi2SetReal(component, gain_vr, 1, gain_value) != fmi2OK ||
+        fmi2SetString(component, transport_vr, 1, transport_value) != fmi2OK) {
+        return fail("set fixed parameter during initialization mode");
+    }
+    if (fmi2ExitInitializationMode(component) != fmi2OK) {
+        return fail("exit initialization mode");
+    }
+
+    g_last_log.clear();
+    if (fmi2SetReal(component, gain_vr, 1, gain_value) != fmi2Error ||
+        g_last_log.find("fixed after initialization mode") == std::string::npos) {
+        return fail("fixed parameter must be locked after initialization mode");
+    }
+    if (fmi2SetString(component, transport_vr, 1, transport_value) != fmi2Error) {
+        return fail("fixed string parameter must be locked after initialization mode");
     }
 
     const fmi2ValueReference command_vr[] = {5};
@@ -406,6 +470,9 @@ int main() {
     if (fmi2Terminate(component) != fmi2OK) {
         return fail("terminate");
     }
+    if (fmi2SetReal(component, gain_vr, 1, gain_value) != fmi2Error) {
+        return fail("fixed parameter must stay locked after terminate");
+    }
     if (fmi2GetBooleanStatus(component, fmi2Terminated, boolean_value) != fmi2OK ||
         boolean_value[0] != fmi2True) {
         return fail("getBooleanStatus Terminated after terminate");
@@ -416,6 +483,9 @@ int main() {
 
     if (fmi2Reset(component) != fmi2OK) {
         return fail("reset");
+    }
+    if (fmi2SetReal(component, gain_vr, 1, gain_value) != fmi2OK) {
+        return fail("reset must unlock fixed parameters");
     }
     if (fmi2DoStep(component, 0.0, 1.0, fmi2True) != fmi2Error) {
         return fail("doStep after reset must fail until initialization");
@@ -433,21 +503,26 @@ int main() {
 
     fmi2FreeInstance(component);
 
-    // The transport is opened in fmi2EnterInitializationMode; an unavailable
-    // backend must make that call fail clearly, not instantiate.
+    // The transport is opened in fmi2ExitInitializationMode from the parameter
+    // interface; an unavailable backend must make that call fail clearly, not
+    // instantiate.
     set_role("adapter");
-    set_transport("does-not-exist");
     g_last_log.clear();
     component = fmi2Instantiate("bad-transport", fmi2CoSimulation, "guid",
                                 "file:///tmp", &callbacks, fmi2False, fmi2False);
     if (component == nullptr) {
         return fail("instantiate must not open the transport");
     }
-    if (fmi2SetupExperiment(component, fmi2False, 0.0, 0.0, fmi2False, 0.0) != fmi2OK ||
-        fmi2EnterInitializationMode(component) != fmi2Error) {
-        return fail("enterInitializationMode must fail for an unavailable transport");
+    const fmi2String bad_transport_value[] = {"does-not-exist"};
+    if (fmi2SetString(component, transport_vr, 1, bad_transport_value) != fmi2OK) {
+        return fail("set transport parameter before initialization");
     }
-    if (g_last_log.find("unknown transport") == std::string::npos) {
+    if (fmi2SetupExperiment(component, fmi2False, 0.0, 0.0, fmi2False, 0.0) != fmi2OK ||
+        fmi2EnterInitializationMode(component) != fmi2OK ||
+        fmi2ExitInitializationMode(component) != fmi2Error) {
+        return fail("exitInitializationMode must fail for an unavailable transport");
+    }
+    if (g_last_log.find("not accepted") == std::string::npos) {
         return fail("unavailable transport failure must log a clear message");
     }
     fmi2FreeInstance(component);

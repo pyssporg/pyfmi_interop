@@ -25,16 +25,17 @@ instance and contains no model equations.
 - **Create and destroy:** instantiation calls the generated
   `pyfmi_interop_create_model`; destruction releases it with the matching
   destroy function. Instantiation does not open a transport.
-- **Initialization:** `fmi2EnterInitializationMode` opens the transport from the
-  generated parameter members, so values written in the instantiated state are
-  visible. Those parameters are initialization-only configuration, never wire
-  fields; runtime behaviour belongs in `in` ports. The runtime resolves
-  parameter names per instance and never hardcodes the parameter port name.
+- **Initialization:** `fmi2ExitInitializationMode` opens the transport from the
+  generated parameter members, so the master's initialization-time parameter
+  values are visible. Those parameters are initialization-only configuration,
+  never wire fields; runtime behaviour belongs in `in` ports. The runtime
+  resolves parameter names per instance and never hardcodes the parameter port
+  name.
 - **Types:** real, integer, boolean, and string map to the IR and runtime
   `DataType`; the FMI ABI owns the pointer lifetimes.
-- **Causality:** inputs are writable, outputs readable, and parameters readable
-  and writable in the instantiated state; writing a fixed parameter after
-  initialization returns `fmi2Error`, as does a direction mismatch.
+- **Causality:** inputs are writable and outputs readable; parameters are
+  readable and writable within the window stated by the byte-transport contract
+  (`CP-003`); a direction mismatch returns `fmi2Error`.
 - **Step:** `fmi2DoStep` advances the runtime by the communication step on the
   caller's thread; it is synchronous and creates no background thread.
 - **Scheduler:** the standalone realtime scheduler is a separate runtime

@@ -129,9 +129,10 @@ ModelDefinition IR ─► serializer ─► framing ─► transport
   portable.
 
 The deployment parameter port is initialization-only configuration: its members
-are FMI `causality="parameter"`, `variability="fixed"`, writable before
-`fmi2EnterInitializationMode`, and never wire fields. Runtime behaviour belongs
-in `in` ports (FMI `causality="input"`), not parameters. `resources/transport.json`
+are FMI `causality="parameter"`, `variability="fixed"`, and never wire fields;
+the write window is stated once in the byte-transport contract (`CP-003`).
+Runtime behaviour belongs in `in` ports (FMI `causality="input"`), not
+parameters. `resources/transport.json`
 lists `queue_depth` and `deadline_s` among the recognised keys, but the C++
 runtime does not consume them; only `transport`, `bind_address`, and
 `peer_address` select the transport.

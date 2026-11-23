@@ -196,9 +196,10 @@ selects the backend and endpoint:
 A port of `0` asks the OS for an ephemeral port. A model that declares the
 parameter interface takes `transport`, `bind_address`, and `peer_address` from
 its FMI parameters; the environment is the fallback only when no parameter
-interface is declared. Those parameters are initialization configuration,
-writable before `fmi2EnterInitializationMode` and never wire fields; runtime
-behaviour belongs in `in` ports (`causality="input"`), not parameters.
+interface is declared. Those parameters are initialization configuration and
+never wire fields; the write window is stated once in the byte-transport
+contract (`docs/breakdown/01-product/adapter-contract.md`). Runtime behaviour
+belongs in `in` ports (`causality="input"`), not parameters.
 `PYFMI_INTEROP_TRANSPORT_ENDPOINT`
 is the legacy suffix for a bare scheme name. The full grammar, framing, and
 validation rules are in `docs/wire.md`.
