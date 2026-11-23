@@ -113,8 +113,8 @@ result as an FMI 2.0 CoSimulation FMU. It is SysML-free.
 
 ## Environment
 
-- Python >= 3.11 and a C++17 compiler; `cmake` and `ninja` build the native
-  runtime.
+- Python >= 3.11, CMake >= 3.21, a C++17 compiler, and `ninja`; these build the
+  native runtime.
 - Native build: `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` then
   `cmake --build build`.
 - Native tests: `ctest --test-dir build --output-on-failure`.
@@ -122,7 +122,7 @@ result as an FMI 2.0 CoSimulation FMU. It is SysML-free.
 - SysML ingestion lives outside this repository: install `pyfmi-sysml` from its
   checkout in a workspace that provides `pycps-sysml2` and `pyfmi-interfaces`.
   There is no `[sysml]` extra and no `--sysml` flag here.
-- Tests: `python -m pytest -m "not sysml"`; the default CI gate. The `sysml`
+- Tests: `python -m pytest -m "not slow"`; the default CI gate. The `sysml`
   marker stays declared for suites that opt into it. Full suite:
   `python -m pytest`; `slow` is an orthogonal qualifier for long native runs.
 - Lint: `ruff check src tests`.

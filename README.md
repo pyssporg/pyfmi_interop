@@ -21,8 +21,8 @@ Static runtime + model library
         ▼
 FMI 2.0 CoSimulation .fmu
 
-Wire format: a 56-byte length + CRC32 + payload-format frame carrying an
-opaque, protobuf, or packed payload.
+Wire format: a 56-byte header carrying the length, CRC32, and payload-format
+fields, followed by an opaque, protobuf, or packed payload.
 ```
 
 The Python layer is SysML-free and lives in `core/`. It holds `spec.py`
@@ -43,6 +43,9 @@ adapter takes its FMI interface, headers, and model description from
 `pyfmi_interfaces`. Both export the same `fmi2*` ABI, so they never share a binary.
 
 ## Install
+
+Requirements: Python 3.11 or newer, CMake 3.21 or newer, a C++17
+compiler, and Ninja (the commands below select the Ninja generator).
 
 From a checkout, build the native runtime first, then install the Python
 package in editable mode:
@@ -132,10 +135,10 @@ fields; the write window is stated once in the byte-transport contract
 cmake --build build
 ctest --test-dir build --output-on-failure
 ruff check src tests
-python -m pytest -m "not sysml"
+python -m pytest -m "not slow"
 ```
 
-The default gate is `python -m pytest -m "not sysml"`; the `sysml` marker stays
+The default gate is `python -m pytest -m "not slow"`; the `sysml` marker stays
 declared for suites that opt into it, though this repository no longer ships
 SysML tests. See `docs/breakdown/04-verification/` for the test ladder and
 `AGENTS.md` for the contributor rules.

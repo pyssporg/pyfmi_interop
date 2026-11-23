@@ -271,11 +271,11 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
 ruff check src tests
-python -m pytest -m "not sysml"
+python -m pytest -m "not slow"
 ```
 
 `python -m pytest` runs the full suite. The `sysml` marker stays declared for
 suites that opt into it, though this repository no longer ships SysML tests.
-CI runs `-m "not sysml"` on Python 3.11 and 3.12 after building the runtime;
+CI runs `-m "not slow"` on Python 3.11 and 3.12 after building the runtime;
 `slow` remains an orthogonal qualifier for long native runs. The moved SysML
 ingestion and end-to-end tests live in `pyfmi_sysml`.
