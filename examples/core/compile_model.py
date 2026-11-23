@@ -1,11 +1,11 @@
-"""Compile a small model without SysML.
+"""Compile a SysML-free ``ModelSpec`` into a packaged FMI 2.0 FMU.
 
-This example imports only :mod:`pyfmi_interop.core`: it builds a ``ModelSpec``
-by hand, then generates the C++, builds the native model, and packages the FMU
-in one call.  Run it from the repository root after building the native
-runtime::
+Run from the workspace root:
 
-    python examples/core/compile_model.py /tmp/pyfmi_core_demo
+    python repos/pyfmi_interop/examples/core/compile_model.py
+
+The sources, native library, and FMU land under ``build/examples/core/``
+unless ``--out`` is given.
 """
 
 from __future__ import annotations
@@ -38,19 +38,19 @@ def build_spec() -> ModelSpec:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "out_dir",
-        nargs="?",
-        default="/tmp/pyfmi_core_demo",
-        help="Directory for generated sources, the build tree and the FMU.",
+        "--out",
+        type=Path,
+        default=Path("build/examples/core"),
+        help="output directory (default: build/examples/core)",
     )
     args = parser.parse_args()
 
-    result = compile_model(build_spec(), Path(args.out_dir))
-    print(f"sources: {result.sources}")
-    print(f"library: {result.library}")
-    print(f"fmu:     {result.fmu}")
+    result = compile_model(build_spec(), args.out)
+    print(result.sources)
+    print(result.library)
+    print(result.fmu)
 
 
 if __name__ == "__main__":
