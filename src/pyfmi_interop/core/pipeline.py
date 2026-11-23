@@ -1,8 +1,8 @@
 """One model specification in, one packaged FMU out.
 
-The pipeline owns no SysML: it generates C++ from a ``ModelSpec``, builds the
-native model and packages the result.  SysML ingestion happens once, before
-this module is called, in the separate composition layer.
+The pipeline owns no source parsing: it generates C++ from a ``ModelSpec``,
+builds the native model and packages the result.  Source-format ingestion
+happens once, before this module is called, in the separate composition layer.
 """
 
 from __future__ import annotations

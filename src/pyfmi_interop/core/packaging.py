@@ -1,7 +1,7 @@
 """Package a built model and its IR into a deterministic FMI 2.0 ``.fmu``.
 
-The realtime FMU differs from the SysML artifact packages: this repository owns
-its own FMI XML and does not depend on an external FMI library.  The archive is
+The realtime FMU differs from the adapter artifact packages: this repository
+owns its own FMI XML and does not depend on an external FMI library.  The archive is
 written from an in-memory table with fixed timestamps, sorted names, and a
 fixed permission mask, so packaging the same inputs twice yields identical
 bytes.
@@ -73,7 +73,7 @@ def package_fmu(
 ) -> Path:
     """Write ``out_path`` from a generated model directory and shared library.
 
-    ``model_description``, ``model_json`` and ``extra_entries`` let the ``psysml2``
+    ``model_description``, ``model_json`` and ``extra_entries`` let the adapter
     FMI layer inject the document and schemas another generator owns while
     this packager still fixes the archive layout, timestamps and order.  The
     legacy facade leaves all three unset and keeps the historical archive.

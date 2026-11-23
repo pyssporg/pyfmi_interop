@@ -7,6 +7,8 @@ stream.
 
 | Date | ID | Decision | Layers | Status | Record |
 |---|---|---|---|---|---|
+| 2026-11-22 | ID-009 | Public adapter seam and interop-owned attribute semantics | architecture, implementation | accepted | `ID-009` |
+| 2026-11-22 | ID-008 | One published GUID per adapter artifact | architecture | accepted | `ID-008` |
 | 2026-11-22 | ID-007 | Lower packages are SysML-free | intent, architecture | accepted | `ID-007` |
 | 2026-11-20 | ID-006 | The Reduction is the only SysML hand-off; typed starts on Variable | architecture, implementation | accepted | `ID-006` |
 | 2026-11-20 | ID-005 | Core/SysML split, one parse, one FMI facade per artifact | intent, architecture | accepted | `ID-005` |

@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Public adapter API in `pyfmi_interop.core`: `write_adapter_tree` writes the
+  complete tree, `require_fmi_layer` returns the emitter set, `select_component`
+  delegates to `pyfmi_interfaces.core.select_component`, and `FMI_LAYER` names
+  the manifest marker.
+- `core/attributes.py` owns timing spelling, period and step precedence, the
+  1 kHz default, the FMI type and causality maps, string capacity, identifier
+  sanitizing and signal projection, from plain values only.
+
+### Changed
+
+- The adapter asks `pyfmi_interfaces` for a model description with
+  `include_default_experiment=False`; no XML post-processing strips it.
+- `adapter_model.py` uses the shared type map and string capacity instead of a
+  second copy.
+
+### Removed
+
+- The private compatibility re-exports on `core.adapter` and the
+  `DefaultExperiment` regex helper.
+
 ## [0.6.0] - 2026-11-22
 
 ### Changed

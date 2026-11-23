@@ -18,3 +18,5 @@ the leaf is the source of truth; the record is how the state got there.
 ### Architecture
 
 - **ID-006** — State: `02-architecture/layers.md` (Layer and module map) · Artifacts: `src/pyfmi_interop/sysml/parse.py`, `src/pyfmi_interop/sysml/adapter.py`, `src/pyfmi_interop/sysml/generate.py`, `tests/sysml/test_psysml2_layer.py`, `pyproject.toml`
+- **ID-008** — State: `02-architecture/ir.md` (Specification and execution IR) · Artifacts: `src/pyfmi_interop/core/adapter.py`, `src/pyfmi_interop/core/adapter_model.py`, `src/pyfmi_interop/core/adapter_render.py`, `docs/breakdown/02-architecture/layers.md`, `docs/breakdown/02-architecture/ir.md`
+- **ID-009** — State: `02-architecture/attribute-semantics.md` (Attribute semantics) · Artifacts: `src/pyfmi_interop/core/adapter.py`, `src/pyfmi_interop/core/adapter_model.py`, `src/pyfmi_interop/core/adapter_render.py`, `src/pyfmi_interop/core/attributes.py`, `src/pyfmi_interop/core/__init__.py`, `docs/breakdown/02-architecture/attribute-semantics.md`, `docs/breakdown/02-architecture/layers.md`, `docs/breakdown/03-implementation/fmi-facade.md`

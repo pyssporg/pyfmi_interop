@@ -564,8 +564,8 @@ def _render_model_impl(model: ModelDefinition) -> str:
         _HEADER
         + f"// Model: {model.name}\n"
         + "//\n"
-        + "// User hook.  The SysML input defines the signal interface, not the\n"
-        + "// equations, so the default implementation is deliberately empty.  Edit\n"
+        + "// User hook.  The interface specification defines the signal interface,\n"
+        + "// not the equations, so the default implementation is deliberately empty.  Edit\n"
         + "// this file (only this file) to implement the model behaviour.\n"
         + "#pragma once\n"
         + "\n"

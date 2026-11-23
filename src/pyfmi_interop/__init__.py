@@ -7,8 +7,9 @@ The public surface is the IR (:mod:`pyfmi_interop.ir`), the wire envelope
 (:mod:`pyfmi_interop.builder`), the FMU packager
 (:mod:`pyfmi_interop.packaging`), and the ``pyfmi-interop`` CLI.
 
-The package is SysML-free: it takes IR JSON or a ``ModelSpec``. SysML
-ingestion lives in a separate composition layer. ``timing`` is imported lazily.
+The package is independent of any source dialect: it takes IR JSON or a
+``ModelSpec``. Source-format ingestion lives in a separate composition layer.
+``timing`` is imported lazily.
 """
 
 from __future__ import annotations

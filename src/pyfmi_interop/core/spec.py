@@ -1,8 +1,9 @@
 """Public model specification and generation configuration.
 
 ``ModelSpec`` is the public interface a caller hands to the generator: names,
-types, directions, timing and the metadata the wire plane needs.  SysML is one
-producer of a ``ModelSpec``, not a dependency of the generator.
+types, directions, timing and the metadata the wire plane needs.  The
+composition layer is the producer of a ``ModelSpec``; the generator does not
+parse a source dialect.
 
 ``BuildConfig`` carries the choices that belong to a generation run rather than
 to the interface itself: the serialization backend, the wire role and the

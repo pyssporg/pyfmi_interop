@@ -1,8 +1,9 @@
 """Realtime execution IR shared by every generator in :mod:`pyfmi_interop`.
 
-The IR is deliberately independent of SysML and of FMI.  Ingestion maps a
-SysML v2 architecture onto it (``sysml.py``), code generation consumes it
-(``codegen/``), and packaging serializes it next to the generated binary.  One
+The IR is deliberately independent of any source dialect and of FMI.  The
+composition layer maps an interface specification onto it, code generation
+consumes it (``codegen/``), and packaging serializes it next to the generated
+binary.  One
 IR means every downstream artifact sees the same signals, value references,
 and rates.
 

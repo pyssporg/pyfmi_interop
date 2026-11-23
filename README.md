@@ -26,10 +26,10 @@ opaque, protobuf, or packed payload.
 ```
 
 The Python layer is SysML-free and lives in `core/`. It holds `spec.py`
-(`ModelSpec`, `BuildConfig`), `ir.py`, `timing.py`, `wire/`, `serialization/`,
-`codegen/`, `builder.py`, `packaging.py`, `pipeline.py`, and `adapter.py` (the
-adapter model and its `pyfmi_interfaces` FMI layer); `cli.py` sits at the package
-root. `core/serialization/` is the payload seam: `protobuf` (canonical),
+(`ModelSpec`, `BuildConfig`), `ir.py`, `timing.py`, `attributes.py`, `wire/`,
+`serialization/`, `codegen/`, `builder.py`, `packaging.py`, `pipeline.py`, and
+`adapter.py` (the adapter model and its `pyfmi_interfaces` FMI layer); `cli.py`
+sits at the package root. `core/serialization/` is the payload seam: `protobuf` (canonical),
 `packed` (deterministic little-endian, dependency-free), and `opaque` (caller
 bytes). The old module paths remain as re-export-only compatibility facades.
 SysML ingestion and the parse-once adapter flow live in `pyfmi_sysml`. The C++
@@ -93,16 +93,17 @@ examples for the source-to-adapter chain.
 ## Composition layer
 
 `pyfmi_sysml` owns the SysML reader (`pycps_sysml2`), the parser-free
-`Reduction` hand-off, export selection, the `PyfmiInterop` vocabulary usage,
+`Reduction` hand-off, export selection, the conditional `PyfmiInterop` include,
 `includes=` package roots, and the `pyfmi-sysml` command line. The interop
-`core/adapter.py` still owns the adapter model, its wire and schema output, and
-its `pyfmi_interfaces` FMI layer; the composition layer calls it with a
-`Reduction` and a `ModelSpec`.
+`core/adapter.py` owns the adapter model, its wire and schema output, and its
+`pyfmi_interfaces` FMI layer. Its public API is `adapter_from_reduction`,
+`select_component`, `require_fmi_layer`, and `write_adapter_tree`; the
+composition layer sends a `Reduction` and a `ModelSpec` and receives a tree.
 
 Export selection is leaf-only among `:> FmuModel` candidates: a shared base such
-as `FmuInterop :> FmuModel` is a role, not an FMU. On the interop side,
-`adapter_from_reduction(..., component=...)` selects among several exported
-leaves. The `pyfmi-interop` CLI has no `--sysml`, `--include`, or `--step-size`
+as `FmuInterop :> FmuModel` is a role, not an FMU. `adapter_from_reduction(...,
+component=...)` selects among several exported leaves through
+`pyfmi_interfaces.core.select_component`. The `pyfmi-interop` CLI has no `--sysml`, `--include`, or `--step-size`
 options and consumes IR JSON only.
 
 Deployment parameters are initialization configuration: `InteropDeployment`

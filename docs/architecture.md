@@ -21,7 +21,7 @@ separate composition layer (`pyfmi_sysml`) in another repository.
 | `src/pyfmi_interop/core/builder.py` | Configures and runs the CMake build. |
 | `src/pyfmi_interop/core/packaging.py` | Emits FMI 2.0 `modelDescription.xml` and the deterministic `.fmu` zip. |
 | `src/pyfmi_interop/core/pipeline.py` | `Compilation` and `compile_model`: generate, build, package in one call. |
-| `src/pyfmi_interop/core/adapter.py` | `adapter_from_reduction(reduction, model, ...)` and the adapter model: the `pyfmi_interfaces` FMI layer, `wire.json`, schema, hooks, and CMake. |
+| `src/pyfmi_interop/core/adapter.py` | Public facade for `adapter_from_reduction(reduction, model, ...)`; construction and wire numbering live in `adapter_model.py`, JSON/C++/CMake emission in `adapter_render.py`. |
 | `src/pyfmi_interop/cli.py` | The `pyfmi-interop` command surface. |
 
 `core/` imports no SysML package. The old import paths (`pyfmi_interop.ir`,

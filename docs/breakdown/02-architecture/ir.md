@@ -31,7 +31,9 @@ packager read.
 - **Types:** real, integer, boolean, and string; a string signal carries a fixed
   `capacity` so its storage can be preallocated.
 - **Identity:** the GUID is a uuid5 of the model name in a fixed namespace, so
-  rebuilding a model preserves its identity.
+  rebuilding a model preserves its identity. An adapter publishes the
+  `pyfmi_interfaces` export GUID and its wire model reuses it, so one artifact
+  has one identity and `fingerprint` hashes that identity.
 - **Serialization:** canonical JSON round-trips through `model_to_dict` and
   `model_from_dict`; `fingerprint` identifies a build. `model.json` is the
   internal build manifest written next to every generated model; the CLI reads

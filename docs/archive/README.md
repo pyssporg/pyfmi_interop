@@ -28,3 +28,7 @@ Records live in the cold-storage archive; extract one with `pb archive read <ID>
 
 - **ID-006** — The Reduction is the only SysML hand-off; typed starts on Variable · accepted · 2026-11-20 · `ID-006`
   SysML is reduced once into a parser-free Reduction that carries typed starts and authored attributes, and the adapter never re-resolves the export unit.
+- **ID-008** — One published GUID per adapter artifact · accepted · 2026-11-22 · `ID-008`
+  The adapter's published GUID is authoritative and its wire model reuses it, so fingerprinting hashes one identity.
+- **ID-009** — Public adapter seam and interop-owned attribute semantics · accepted · 2026-11-22 · `ID-009`
+  The adapter facade publishes writer, guard and selection, attribute semantics live in interop, and definitions carry no export policy.
