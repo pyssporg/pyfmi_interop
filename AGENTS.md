@@ -38,7 +38,7 @@ result as an FMI 2.0 CoSimulation FMU. It is SysML-free.
   wire schema, and the adapter model, builds the native model, and packages the
   FMU.
 - SysML ingestion lives in the separate `pyfmi_sysml` composition layer: it
-  loads through `pycps_sysml2`, reduces once to a parser-free `Reduction`, maps
+  loads through `pycps_sysml`, reduces once to a parser-free `Reduction`, maps
   it to `ModelSpec`, and calls the interop generator; interop never parses SysML
   and never re-resolves the export unit.
 - The C++ layer in `src/runtime/` owns the reusable `ModelRuntime` interface,
@@ -120,7 +120,7 @@ result as an FMI 2.0 CoSimulation FMU. It is SysML-free.
 - Native tests: `ctest --test-dir build --output-on-failure`.
 - Install: `python -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"`.
 - SysML ingestion lives outside this repository: install `pyfmi-sysml` from its
-  checkout in a workspace that provides `pycps-sysml2` and `pyfmi-interfaces`.
+  checkout in a workspace that provides `pycps-sysml` and `pyfmi-interfaces`.
   There is no `[sysml]` extra and no `--sysml` flag here.
 - Tests: `python -m pytest -m "not slow"`; the default CI gate. The `sysml`
   marker stays declared for suites that opt into it. Full suite:

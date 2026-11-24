@@ -26,7 +26,7 @@ mode inside a venv; the wheel build follows the same order.
 - **Runtime dependency:** `pip install -e ".[dev]"` installs
   `pyfmi-interfaces`, the adapter's FMI layer. There is no `[sysml]` extra.
 - **SysML composition:** install the sibling checkouts editable:
-  `pip install --no-deps -e ../pycps_sysml2 -e ../pyfmi_interfaces -e ../pyfmi_sysml`.
+  `pip install --no-deps -e ../pycps_sysml -e ../pyfmi_interfaces -e ../pyfmi_sysml`.
   `pyfmi_sysml` depends on this checkout (`pyfmi-interop`) and owns ingestion.
 - **Public API:** the SysML-free path runs through `pyfmi_interop.core`:
 
