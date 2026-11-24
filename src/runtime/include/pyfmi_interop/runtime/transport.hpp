@@ -66,7 +66,8 @@ public:
     virtual ~Transport() = default;
 
     // Called once before the first step with the full configuration URI
-    // (`loopback`, `udp://host:port?peer=host:port`, `tcp://host:port`).
+    // (`loopback`, `udp://host:port?peer=host:port`, `tcp://host:port`,
+    // `unix:///path` or `unix://@name`, optionally `?peer=`).
     virtual void initialize(const std::string& uri) { (void)uri; }
 
     // Called once during shutdown.  Must not throw.
@@ -99,7 +100,7 @@ using TransportFactory = std::unique_ptr<Transport> (*)();
 bool register_transport(const std::string& name, TransportFactory factory);
 
 // `name_or_uri` is either a bare scheme (`loopback`) or a full URI whose
-// scheme (`udp`, `tcp`) selects the backend.  Unknown names throw
+// scheme (`udp`, `tcp`, `unix`) selects the backend.  Unknown names throw
 // TransportError listing every registered name.
 std::unique_ptr<Transport> make_transport(const std::string& name_or_uri);
 

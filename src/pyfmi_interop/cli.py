@@ -27,7 +27,7 @@ __all__ = ["build_parser", "main"]
 #: Byte transports shipped in ``transport/``.  The C++ registry
 #: (``make_transport``/``transport_names``) is authoritative at run time; this
 #: list is the operator-facing view and must match it.
-_BYTE_TRANSPORTS = ("loopback", "udp", "tcp")
+_BYTE_TRANSPORTS = ("loopback", "udp", "tcp", "unix")
 
 
 def build_parser() -> argparse.ArgumentParser:

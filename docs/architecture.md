@@ -179,7 +179,7 @@ Direction follows FMI causality:
 ## Transport boundary
 
 The repository defines the wire frame, not a protocol. Byte transports
-(`loopback`, `udp`, `tcp`) carry the frame; this tree ships the `Transport`
+(`loopback`, `udp`, `tcp`, `unix`) carry the frame; this tree ships the `Transport`
 interface and those registered backends, and no protocol binding. A transport
 is selected at run time from the URI scheme by `make_transport()`; an unknown
 scheme throws `TransportError` listing the registered names rather than

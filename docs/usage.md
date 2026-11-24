@@ -171,7 +171,7 @@ not `none`. `pyfmi-interop build` passes these path variables, resolving them
 for the checkout or the installed wheel, and leaves `PYFMI_INTEROP_WIRE` at its
 default.
 
-The transport library is linked whole because the UDP and TCP backends
+The transport library is linked whole because the UDP, TCP, and Unix backends
 register themselves from static initializers, and a plain archive link would
 drop them. The generated project fails configuration with a clear message when
 a role model is configured without the transport include directory or library:
@@ -191,7 +191,9 @@ selects the backend and endpoint:
 
 - `loopback` — in-process, the default;
 - `udp://<bind-host>:<port>[?peer=<host>:<port>]` — one datagram per frame;
-- `tcp://<bind-host>:<port>[?peer=<host>:<port>]` — stream transport.
+- `tcp://<bind-host>:<port>[?peer=<host>:<port>]` — stream transport;
+- `unix:///abs/path.sock` or `unix://@name` (`?peer=` optional) — single-host
+  `AF_UNIX` datagram, one datagram per frame.
 
 A port of `0` asks the OS for an ephemeral port. A model that declares the
 parameter interface takes `transport`, `bind_address`, and `peer_address` from
@@ -233,7 +235,7 @@ the built shared library. The library must exist and match the model name.
 
 | Command | Purpose |
 | --- | --- |
-| `pyfmi-interop transports` | List the byte transport names (`loopback`, `udp`, `tcp`). |
+| `pyfmi-interop transports` | List the byte transport names (`loopback`, `udp`, `tcp`, `unix`). |
 | `pyfmi-interop serializations` | List the payload backends (`protobuf`, `packed`, `opaque`). |
 | `pyfmi-interop inspect --model-json PATH` | Load and validate IR JSON and print the model summary. |
 | `pyfmi-interop schema --model-json PATH --out DIR [--serialization NAME]` | Emit the selected backend's schema bundle (`wire.json`, plus `<Model>.proto` for protobuf). |

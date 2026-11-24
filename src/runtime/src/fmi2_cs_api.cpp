@@ -153,13 +153,22 @@ std::string resolve_transport_uri(const ModelRuntime* model, std::string& error)
     if (scheme.empty() || scheme == "loopback") {
         return "loopback";
     }
-    if (scheme != "udp" && scheme != "tcp") {
+    if (scheme != "udp" && scheme != "tcp" && scheme != "unix") {
         error = "parameter 'transport' value '" + scheme +
-                "' is not accepted; accepted values: loopback, udp, tcp";
+                "' is not accepted; accepted values: loopback, udp, tcp, unix";
         return {};
     }
     if (bind.empty()) {
+        if (scheme == "unix") {
+            error = "parameter 'bind_address' is required for transport 'unix'";
+            return {};
+        }
         return "loopback";
+    }
+    if (scheme == "unix" && bind.front() != '/' && bind.front() != '@') {
+        error = "parameter 'bind_address' value '" + bind +
+                "' is not an absolute path or '@name' for transport 'unix'";
+        return {};
     }
 
     std::string uri = scheme + "://" + bind;

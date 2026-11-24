@@ -35,8 +35,8 @@ bytes). The old module paths remain as re-export-only compatibility facades.
 SysML ingestion and the parse-once adapter flow live in `pyfmi_sysml`. The C++
 layer in `src/runtime/` owns the
 `ModelRuntime` interface, the fixed-step realtime scheduler, the wire codec,
-and the types it shares with the Python end; `src/transport/` holds the UDP and
-TCP backends.
+and the types it shares with the Python end; `src/transport/` holds the UDP,
+TCP, and Unix datagram backends.
 
 Each artifact owns one FMI facade: the core emits the interop facade, and the
 adapter takes its FMI interface, headers, and model description from
@@ -95,7 +95,7 @@ examples for the source-to-adapter chain.
 
 ## Composition layer
 
-`pyfmi_sysml` owns the SysML reader (`pycps_sysml2`), the parser-free
+`pyfmi_sysml` owns the SysML reader (`pycps_sysml`), the parser-free
 `Reduction` hand-off, export selection, the conditional `PyfmiInterop` include,
 `includes=` package roots, and the `pyfmi-sysml` command line. The interop
 `core/adapter.py` owns the adapter model, its wire and schema output, and its

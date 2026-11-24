@@ -2,6 +2,7 @@ add_library(pyfmi_interop_transport STATIC
     src/transport_uri.cpp
     src/udp_transport.cpp
     src/tcp_transport.cpp
+    src/unix_transport.cpp
 )
 
 target_include_directories(pyfmi_interop_transport

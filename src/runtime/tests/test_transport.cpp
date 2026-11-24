@@ -3,10 +3,12 @@
 #include "pyfmi_interop/runtime/wire.hpp"
 #include "pyfmi_interop/transport/tcp_transport.hpp"
 #include "pyfmi_interop/transport/udp_transport.hpp"
+#include "pyfmi_interop/transport/unix_transport.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -29,6 +31,7 @@ using pyfmi_interop::TransportError;
 using pyfmi_interop::TransportStats;
 using pyfmi_interop::transport::TcpTransport;
 using pyfmi_interop::transport::UdpTransport;
+using pyfmi_interop::transport::UnixTransport;
 
 int fail(const char* message) {
     std::cerr << message << '\n';
@@ -88,6 +91,41 @@ int raw_connect(std::uint16_t port) {
     return socket;
 }
 
+std::string unique_socket_path(const char* tag) {
+    return "/tmp/pyfmi_interop_unix_" + std::to_string(::getpid()) + "_" + tag +
+           ".sock";
+}
+
+socklen_t unix_address_length(const std::string& path) {
+    return static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + path.size() + 1u);
+}
+
+bool bind_raw_datagram(const std::string& path) {
+    const int socket = ::socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (socket < 0) {
+        return false;
+    }
+    sockaddr_un address {};
+    address.sun_family = AF_UNIX;
+    std::memcpy(address.sun_path, path.c_str(), path.size() + 1u);
+    const bool bound =
+        ::bind(socket, reinterpret_cast<const sockaddr*>(&address),
+               unix_address_length(path)) == 0;
+    ::close(socket);
+    return bound;
+}
+
+std::optional<std::vector<std::byte>> receive_retry(Transport& transport) {
+    std::optional<std::vector<std::byte>> frame;
+    for (int attempt = 0; attempt < 2000 && !frame; ++attempt) {
+        frame = transport.receive();
+        if (!frame) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+    return frame;
+}
+
 }  // namespace
 
 int main() {
@@ -96,7 +134,8 @@ int main() {
     if (!std::is_sorted(names.begin(), names.end()) ||
         std::find(names.begin(), names.end(), "loopback") == names.end() ||
         std::find(names.begin(), names.end(), "udp") == names.end() ||
-        std::find(names.begin(), names.end(), "tcp") == names.end()) {
+        std::find(names.begin(), names.end(), "tcp") == names.end() ||
+        std::find(names.begin(), names.end(), "unix") == names.end()) {
         return fail("transport registry names");
     }
     try {
@@ -219,6 +258,94 @@ int main() {
         ::close(client);
         if (offset != expected.size() || received_bytes != expected) {
             return fail("tcp send payload");
+        }
+    }
+
+    // Unix pathname round trip.  The receiver replies to the last observed
+    // sender because it has no peer=, so both directions are covered.
+    {
+        const std::string receiver_path = unique_socket_path("rx");
+        const std::string sender_path = unique_socket_path("tx");
+        (void)::unlink(receiver_path.c_str());
+        (void)::unlink(sender_path.c_str());
+
+        UnixTransport receiver;
+        receiver.initialize("unix://" + receiver_path);
+        UnixTransport sender;
+        sender.initialize("unix://" + sender_path + "?peer=" + receiver_path);
+        if (receiver.bound_path() != receiver_path ||
+            sender.bound_path() != sender_path) {
+            return fail("unix bound_path");
+        }
+        if (!sender.send(to_bytes(expected))) {
+            return fail("unix pathname send");
+        }
+        const auto received = receive_retry(receiver);
+        if (!equals(received, expected)) {
+            return fail("unix pathname round trip");
+        }
+        if (sender.stats().frames_sent != 1 || receiver.stats().frames_received != 1) {
+            return fail("unix pathname stats");
+        }
+        if (!receiver.send(to_bytes(expected))) {
+            return fail("unix reply to last sender send");
+        }
+        const auto reply = receive_retry(sender);
+        if (!equals(reply, expected)) {
+            return fail("unix reply to last sender");
+        }
+    }
+
+    // Abstract-namespace round trip: no filesystem entry and no cleanup.
+    {
+        const std::string receiver_name =
+            "@pyfmi_interop_abs_rx_" + std::to_string(::getpid());
+        const std::string sender_name =
+            "@pyfmi_interop_abs_tx_" + std::to_string(::getpid());
+        UnixTransport receiver;
+        receiver.initialize("unix://" + receiver_name);
+        UnixTransport sender;
+        sender.initialize("unix://" + sender_name + "?peer=" + receiver_name);
+        if (!sender.send(to_bytes(expected))) {
+            return fail("unix abstract send");
+        }
+        const auto received = receive_retry(receiver);
+        if (!equals(received, expected)) {
+            return fail("unix abstract round trip");
+        }
+    }
+
+    // A pathname left behind by a closed socket is stale; initialize unlinks
+    // it before bind.  finalize removes the pathname this instance created.
+    {
+        const std::string path = unique_socket_path("stale");
+        (void)::unlink(path.c_str());
+        if (!bind_raw_datagram(path)) {
+            return fail("unix raw stale bind");
+        }
+        UnixTransport transport;
+        transport.initialize("unix://" + path);
+        if (transport.bound_path() != path) {
+            return fail("unix stale rebind");
+        }
+        transport.finalize();
+        if (::access(path.c_str(), F_OK) == 0) {
+            return fail("unix finalize must remove its pathname");
+        }
+        transport.initialize("unix://" + path);
+        transport.finalize();
+    }
+
+    // Oversize frames map to TransportError before any send.
+    {
+        const std::string path = unique_socket_path("oversize");
+        UnixTransport transport;
+        transport.initialize("unix://" + path);
+        std::vector<std::byte> oversized(65508, std::byte{0});
+        try {
+            (void)transport.send(oversized);
+            return fail("unix must reject a frame larger than 65507 bytes");
+        } catch (const TransportError&) {
         }
     }
 

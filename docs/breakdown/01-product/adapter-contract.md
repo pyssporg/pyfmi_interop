@@ -3,7 +3,7 @@ id: CP-003
 type: capability
 title: Byte transport contract
 summary: The repository defines the wire frame and one Transport interface; the loopback backend is always built, and no protocol binding ships.
-date: 2026-11-19
+date: 2026-11-24
 status: current
 ---
 
@@ -18,9 +18,10 @@ A transport carries wire frames; it does not interpret the model interface.
   `receive`.
 - **Loopback:** the in-process backend is always built and is the only backend
   needed for single-process tests.
-- **Byte transports:** `loopback`, `udp`, and `tcp` name the byte carriers; the
-  CLI lists the same names and the registry is authoritative at run time.
-  Framing is the only contract this repository defines for them.
+- **Byte transports:** `loopback`, `udp`, `tcp`, and `unix` name the byte
+  carriers; the CLI lists the same names and the registry is authoritative at
+  run time. Framing is the only contract this repository defines for them.
+  `unix` is a single-host `AF_UNIX` datagram carrier, not a stream protocol.
 - **Deployment:** a transport endpoint is resolved per instance from the
   model's `parameter` interface (`transport`, `bind_address`, `peer_address`)
   when initialization mode is exited. The process environment is consulted only

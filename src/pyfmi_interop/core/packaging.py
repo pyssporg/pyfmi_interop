@@ -183,7 +183,7 @@ def _transport_json() -> bytes:
 
     payload = {
         "default": "loopback",
-        "schemes": ["loopback", "udp", "tcp"],
+        "schemes": ["loopback", "udp", "tcp", "unix"],
         "parameter_keys": [
             "transport",
             "bind_address",
@@ -197,6 +197,8 @@ def _transport_json() -> bytes:
             "loopback",
             "udp://239.0.0.1:5000",
             "tcp://127.0.0.1:5001",
+            "unix:///tmp/model.sock",
+            "unix://@model-name",
         ],
     }
     return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")

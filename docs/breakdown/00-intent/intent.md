@@ -37,14 +37,14 @@ lives in the `pyfmi_sysml` composition layer.
   export the same `fmi2*` ABI and never share a binary; this repository owns the wire plane.
 - **Two registered seams:** serialization selects one schema authority per backend
   — protobuf canonical, `packed` second — while transports select loopback, UDP,
-  or TCP by name at runtime. Framing stays single-authority and versioned: wire
+  TCP, or Unix datagrams by name at runtime. Framing stays single-authority and versioned: wire
   version 2 adds `payload_format`, field numbers are append-only, reserved stays reserved.
 - **Deployment is a parameter interface:** deployment-varying transport
   configuration arrives as FMI parameters with default values, authored through
   the composition layer, and the master binds it before initialization; structural
   facts stay build-time attributes. The environment is only a fallback when a
   model declares no parameter interface; endpoints are never SSD/SSP content, so an SSP stays portable.
-- **SysML is composed outside:** `pyfmi_sysml` loads through `pycps_sysml2`, reduces
+- **SysML is composed outside:** `pyfmi_sysml` loads through `pycps_sysml`, reduces
   once to the parser-free `Reduction`, maps it to `ModelSpec`, and calls generation;
   vocabulary lives in `pyssp_sysml_definitions`. `pyfmi_interop` declares no
   `[sysml]` extra, no `--sysml` flag, and no upstream parser dependency.

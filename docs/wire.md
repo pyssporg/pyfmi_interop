@@ -16,8 +16,9 @@ payload and has no protobuf dependency.
 ## Transport boundary
 
 A frame is transport-independent bytes. Byte transports (`loopback`, `udp`,
-`tcp`) carry whole frames; see [Transport seam](#transport-seam). Discovery,
-medium, and protocol semantics belong elsewhere and never change the envelope.
+`tcp`, `unix`) carry whole frames; see [Transport seam](#transport-seam).
+Discovery, medium, and protocol semantics belong elsewhere and never change the
+envelope.
 
 ## Byte layout
 
@@ -200,8 +201,8 @@ Empty payload for the same model and header values (format opaque):
 ## Transport seam
 
 The runtime ships a byte-frame `Transport` interface, a static registry, and
-three backends. All calls are non-blocking; the step loop never waits for a
-peer.
+four backends (loopback, UDP, TCP, and Unix datagrams). All calls are
+non-blocking; the step loop never waits for a peer.
 
 ### Interface
 
@@ -232,6 +233,8 @@ Configuration is parsed in one place (`src/transport/src/transport_uri.cpp`):
 loopback
 udp://<bind-host>:<port>[?peer=<host>:<port>]
 tcp://<bind-host>:<port>[?peer=<host>:<port>]
+unix:///abs/path.sock[?peer=/abs/peer.sock]
+unix://@name[?peer=@peer]
 ```
 
 * `<port>` is decimal; `0` asks the OS for an ephemeral port.
@@ -239,6 +242,16 @@ tcp://<bind-host>:<port>[?peer=<host>:<port>]
   with `TransportError`; `SO_RCVBUF` is maximized and receive drains to the
   newest datagram. Without `peer=`, the backend sends to the last observed
   sender.
+* Unix: `AF_UNIX` + `SOCK_DGRAM`, one datagram per frame, with the same
+  send/receive and size rules as UDP (no stream framing). A pathname must be
+  absolute; an abstract name starts with `@` and occupies the kernel namespace
+  instead of the filesystem. Abstract names need no cleanup. In the FMU
+  parameter interface the bare `bind_address`/`peer_address` values are
+  `/abs/path.sock` and `@name` (the resolver prepends `unix://`). Before
+  binding a pathname, an existing entry is unlinked **only if it is a socket**
+  (a stale socket left by a crashed process); any other file is refused, so
+  binding never clobbers it. `finalize()` closes the socket and unlinks the
+  pathname it created.
 * TCP: without `peer=` the backend listens and accepts one peer; with `peer=`
   it connects. The envelope is self-delimiting, so partial reads are buffered
   until the 56-byte header yields `payload_length` and the whole frame is
@@ -263,11 +276,12 @@ REGISTER_TRANSPORT("loopback", []() -> std::unique_ptr<Transport> {
 });
 ```
 
-`make_transport(name_or_uri)` selects by scheme (`loopback`, `udp`, `tcp`) and
-throws `TransportError` listing every registered name when the scheme is
-unknown. `transport_names()` returns the sorted names. The UDP and TCP
-backends live in the static library `pyfmi_interop_transport`, so consumers
-link that archive with whole-archive to keep its registration objects.
+`make_transport(name_or_uri)` selects by scheme (`loopback`, `udp`, `tcp`,
+`unix`) and throws `TransportError` listing every registered name when the
+scheme is unknown. `transport_names()` returns the sorted names. The UDP, TCP,
+and Unix backends live in the static library `pyfmi_interop_transport`, so
+consumers link that archive with whole-archive to keep its registration
+objects.
 
 ### Stats
 
@@ -385,9 +399,10 @@ model-id domain separator and `<d`/`<IB` record layout, magic `PFMI`, version
 | `src/runtime/src/wire.cpp` | Packed little-endian envelope, CRC32/ISO-HDLC table, portable SHA-256 (no OpenSSL) |
 | `src/runtime/include/pyfmi_interop/runtime/transport.hpp` | Byte-frame `Transport`, `TransportStats`, registry, `REGISTER_TRANSPORT` |
 | `src/runtime/include/pyfmi_interop/runtime/loopback_transport.hpp` | In-process reference byte transport |
-| `src/transport/include/pyfmi_interop/transport/transport_uri.hpp` | URI grammar shared by the UDP and TCP backends |
+| `src/transport/include/pyfmi_interop/transport/transport_uri.hpp` | URI grammar shared by the UDP, TCP, and Unix backends |
 | `src/transport/include/pyfmi_interop/transport/udp_transport.hpp` | One-datagram-per-frame UDP backend |
 | `src/transport/include/pyfmi_interop/transport/tcp_transport.hpp` | Stream backend with envelope reassembly |
+| `src/transport/include/pyfmi_interop/transport/unix_transport.hpp` | One-datagram-per-frame `AF_UNIX`/`SOCK_DGRAM` backend (pathname or abstract) |
 | `src/runtime/include/pyfmi_interop/runtime/payload.hpp` | `PayloadCodec` interface plus the compile-time `payload_mode_name()` |
 | `src/runtime/src/payload.cpp` | Reports the selected payload mode to dependents |
 

@@ -6,9 +6,22 @@
 #include <string>
 #include <string_view>
 
+#if !defined(_WIN32)
+#include <sys/un.h>
+#endif
+
 namespace pyfmi_interop {
 namespace transport {
 namespace {
+
+// A pathname needs its trailing NUL and an abstract name needs its leading NUL
+// inside sun_path.  Win32 has no AF_UNIX in this tree yet; keep the Linux
+// capacity there so the parser stays compilable and the diagnostics stable.
+#if defined(_WIN32)
+constexpr std::size_t kUnixPathCapacity = 108;
+#else
+constexpr std::size_t kUnixPathCapacity = sizeof(sockaddr_un::sun_path);
+#endif
 
 std::string trim(std::string_view text) {
     std::size_t begin = 0;
@@ -72,6 +85,42 @@ Endpoint parse_endpoint(const std::string& text, const char* field) {
     return endpoint;
 }
 
+std::string parse_unix_path(const std::string& text, const char* field) {
+    if (text.empty()) {
+        throw TransportError(std::string("transport URI: empty unix ") + field);
+    }
+    if (text.find('\0') != std::string::npos) {
+        throw TransportError(std::string("transport URI: unix ") + field +
+                             " contains a NUL byte");
+    }
+    if (text.front() == '@') {
+        if (text.size() == 1u) {
+            throw TransportError(std::string("transport URI: abstract unix ") + field +
+                                 " has an empty name");
+        }
+        // One leading NUL plus the name must fit in sun_path.
+        if (text.size() >= kUnixPathCapacity) {
+            throw TransportError(std::string("transport URI: unix ") + field + " '" +
+                                 text + "' exceeds the " +
+                                 std::to_string(kUnixPathCapacity - 1u) +
+                                 "-byte sun_path limit");
+        }
+        return text;
+    }
+    if (text.front() != '/') {
+        throw TransportError(std::string("transport URI: unix ") + field + " '" + text +
+                             "' must be an absolute path or an '@name'");
+    }
+    // The pathname and its trailing NUL must fit in sun_path.
+    if (text.size() >= kUnixPathCapacity) {
+        throw TransportError(std::string("transport URI: unix ") + field + " '" + text +
+                             "' exceeds the " +
+                             std::to_string(kUnixPathCapacity - 1u) +
+                             "-byte sun_path limit");
+    }
+    return text;
+}
+
 }  // namespace
 
 std::string scheme_of(std::string_view name_or_uri) {
@@ -108,7 +157,11 @@ Uri parse_uri(std::string_view uri) {
         query = rest.substr(question + 1);
         rest = rest.substr(0, question);
     }
-    parsed.bind = parse_endpoint(rest, "bind endpoint");
+    if (parsed.scheme == "unix") {
+        parsed.bind_path = parse_unix_path(rest, "bind address");
+    } else {
+        parsed.bind = parse_endpoint(rest, "bind endpoint");
+    }
 
     if (!query.empty()) {
         std::size_t offset = 0;
@@ -127,7 +180,11 @@ Uri parse_uri(std::string_view uri) {
                 const std::string key = option.substr(0, equals);
                 const std::string value = option.substr(equals + 1);
                 if (key == "peer") {
-                    parsed.peer = parse_endpoint(value, "peer endpoint");
+                    if (parsed.scheme == "unix") {
+                        parsed.peer_path = parse_unix_path(value, "peer address");
+                    } else {
+                        parsed.peer = parse_endpoint(value, "peer endpoint");
+                    }
                 } else {
                     throw TransportError("transport URI: unknown option '" + key + "'");
                 }

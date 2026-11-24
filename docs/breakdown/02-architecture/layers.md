@@ -21,7 +21,7 @@ separate composition layer, not a package in this tree.
   `pyfmi_interfaces.core.select_component`), `require_fmi_layer`, and
   `write_adapter_tree` (whole tree, model description without `DefaultExperiment`);
   no private re-exports.
-- **Composition boundary (`pyfmi_sysml`):** `parse` loads through `pycps_sysml2`,
+- **Composition boundary (`pyfmi_sysml`):** `parse` loads through `pycps_sysml`,
   reduces once, extracts plain attribute values, and maps to `ModelSpec`;
   `generate_adapter` calls the two public adapter names. Interop never loads the
   source or re-resolves the export unit.
@@ -29,11 +29,12 @@ separate composition layer, not a package in this tree.
   FMI interface model and emitters, and is SysML-free.
 - **Vocabulary (`pyssp_sysml_definitions`):** carries `PysspCore` and the artifact
   vocabularies (`PyfmiInterop`, later FMI/SoS) with no Python dependencies;
-  `pycps_sysml2` depends on it and keeps the parser, IR, and policies.
+  `pycps_sysml` depends on it and keeps the parser, IR, and policies.
 - **Compatibility facades:** `.ir`, `.wire`, `.serialization`, `.codegen`,
   `.builder`, `.packaging`, `.schema`, `.native`, `.roles`, and `.timing` re-export.
 - **C++ runtime:** `src/runtime/` holds `ModelRuntime`, the scheduler, the wire
-  codec, the `Transport` registry and loopback; `src/transport/` holds UDP/TCP.
+  codec, the `Transport` registry and loopback; `src/transport/` holds
+  UDP, TCP, and Unix datagram backends.
 - **Wire:** `core/wire/`, `src/runtime/src/wire.cpp`, and `core/serialization/`
   define the envelope, payload schema, and `wire.json`; byte transports carry
   the frame. `core/schema.py` is a backwards-compatible facade over the backends.

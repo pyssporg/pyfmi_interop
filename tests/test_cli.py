@@ -41,7 +41,7 @@ def test_transports_table_lists_only_shipped_transports(capsys):
     output = capsys.readouterr().out
 
     assert "name" in output
-    assert set(output.split()[1:]) == {"loopback", "udp", "tcp"}
+    assert set(output.split()[1:]) == {"loopback", "udp", "tcp", "unix"}
 
 
 def test_serializations_table_lists_the_backends(capsys):

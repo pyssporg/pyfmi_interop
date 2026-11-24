@@ -211,7 +211,7 @@ def test_transport_json_documents_the_parameter_contract(tmp_path):
         transport = json.loads(archive.read("resources/transport.json"))
 
     assert transport["default"] == "loopback"
-    assert transport["schemes"] == ["loopback", "udp", "tcp"]
+    assert transport["schemes"] == ["loopback", "udp", "tcp", "unix"]
     assert transport["parameter_keys"] == [
         "transport",
         "bind_address",
