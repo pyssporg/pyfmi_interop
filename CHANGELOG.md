@@ -5,7 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-11-24
+
+### Changed (breaking)
+
+- `pyfmi_interop` emits from an interface specification instead of SysML: its
+  input is IR JSON or a `ModelSpec`, and it emits the realtime model, the
+  adapter, and the FMU. SysML ingestion, the parse-once `ParsedModel`
+  hand-off, export selection, package includes, and the `PyfmiInterop`
+  vocabulary moved to `pyfmi-sysml`.
+- `pyfmi-interfaces` is a normal runtime dependency and supplies the adapter's
+  FMI layer. One FMI facade per artifact, and `generate_model` no longer takes
+  `fmi_layer`.
+- The Python layer is a SysML-free `core/` (`spec`, IR, timing, wire,
+  serialization, codegen, builder, packaging, `compile_model`); the adapter
+  model moved verbatim to `pyfmi_interop.core.adapter` and is exported from
+  `pyfmi_interop.core`.
+- The CLI drops `--sysml`, `--include`, `--step-size`, and `--name`, and the
+  `[sysml]` extra and every SysML test are gone.
+- Native sources live under `src/`: `runtime/` is `src/runtime/`,
+  `transport/` is `src/transport/`, and the vendored FMI headers are
+  `3rd_party/fmi2/`. Examples are in `examples/core/` and tests in
+  `tests/core/`; the default gate is `pytest -m "not sysml"`.
+- The adapter asks `pyfmi_interfaces` for a model description with
+  `include_default_experiment=False`; no XML post-processing strips it.
+  `adapter_model.py` uses the shared type map and string capacity instead of a
+  second copy.
 
 ### Added
 
@@ -16,97 +41,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `core/attributes.py` owns timing spelling, period and step precedence, the
   1 kHz default, the FMI type and causality maps, string capacity, identifier
   sanitizing and signal projection, from plain values only.
-
-### Changed
-
-- The adapter asks `pyfmi_interfaces` for a model description with
-  `include_default_experiment=False`; no XML post-processing strips it.
-- `adapter_model.py` uses the shared type map and string capacity instead of a
-  second copy.
-
-### Removed
-
-- The private compatibility re-exports on `core.adapter` and the
-  `DefaultExperiment` regex helper.
-
-## [0.6.0] - 2026-11-22
-
-### Changed
-
-- `pyfmi_interop` is SysML-free: it takes IR JSON or a `ModelSpec` and emits the
-  realtime model, the adapter, and the FMU. SysML ingestion, the parse-once
-  `ParsedModel` hand-off, export selection, package includes, and the
-  `PyfmiInterop` vocabulary moved to `pyfmi-sysml`.
-- `pyfmi-interfaces` is a normal runtime dependency (the adapter's FMI layer).
-- The adapter model moved verbatim to `pyfmi_interop.core.adapter` and is
-  exported from `pyfmi_interop.core`.
-
-### Removed
-
-- The `sysml/` subpackage, the `psysml2` compatibility module, and the
-  `definitions` facade (`interop_definitions`, `load_with_interop`).
-- The `--sysml`, `--include`, `--step-size`, and `--name` CLI options, the
-  `[sysml]` extra, and every SysML test in this repository.
-
-### Added
-
+- Unix datagram transport (`AF_UNIX`, `SOCK_DGRAM`) alongside loopback, UDP,
+  and TCP; one datagram is one wire frame.
 - Public `pyfmi_interop.core` contract: `ModelSpec` (the interface),
   `BuildConfig` (serialization, role, prefix), `Compilation`, and
   `compile_model` for generate-build-package in one call. `generate_model`,
   `build_model`, and `package_fmu` are the individual stages.
 - SysML-free `examples/core/compile_model.py`, which drives `ModelSpec`
-  through `compile_model` without the `sysml` extra.
-- Reusable `PyfmiInterop` SysML library shipped as package data: a model can
-  `import PyfmiInterop::*` to get the `FmuInterop :> FmuModel` base, its
-  `InteropDeployment` initialization parameters, and `InteropMetadata`.
-- `interop_definitions()` returns the bundled library path, and both
-  `load_model` and the `psysml2` generation path include it automatically.
-- Multi-package SysML includes: `load_model(includes=...)`,
-  `generate_model(sysml_includes=...)`, and repeatable
-  `generate --include PATH` pass extra package roots to the IR load and the
-  `psysml2` reparse.
-- Library-defined FMUs are export units: a leaf an included package declares
-  can be selected, and a direct FMU is packaged under its bare name.
-- Multi-unit example `examples/system/`: `build_one.py` packages one selected
-  `FmuInterop` unit and `build_all.py` packages every unit `fmu_units()`
-  enumerates, one FMU each.
-- `load_architecture(source, includes=...)` returns the loaded `Architecture`,
-  and `load_model(..., composition=...)` / `model_from_architecture(...,
-  composition=...)` reduce one named unit. The CLI has no such selector.
+  through `compile_model`.
 
-### Changed
+### Removed
 
-- The Python layer is split into a SysML-free `core/` and a `sysml/` boundary.
-  `core/` holds `spec`, the IR, timing, wire, serialization, codegen, builder,
-  packaging, and `compile_model`; `sysml/` holds `parse`, `generate_adapter`,
-  the `pyfmi_sysml2` adapter layer, and the bundled definitions. The old import
-  paths (`pyfmi_interop.ir`, `.wire`, `.serialization`, `.codegen`, `.builder`,
-  `.packaging`, `.schema`, `.native`, `.roles`, `.timing`, `.psysml2`,
-  `.definitions`) remain as re-export-only compatibility facades.
-- SysML is parsed once: `parse` loads the architecture, calls `to_reduction`
-  once, and returns the parser-free `ParsedModel(spec, reduction, unit)`.
-  `generate_adapter` and `adapter_from_reduction` consume that handle instead
-  of reloading the source or re-resolving the export unit, and `Variable.start`
-  restores authored parameter defaults while inputs carry the neutral start.
-- The `sysml` extra pins `pyfmi-sysml2` v0.4.0 for the parser-free `Reduction`
-  API; `pycps-sysml2` stays at v0.3.0.
-- One FMI facade per artifact: the core emits the interop facade, and the
-  adapter takes its FMI interface, headers, and model description from
-  `pyfmi_sysml2`. Both export the same `fmi2*` ABI but never share a binary;
-  `generate_model` no longer takes `fmi_layer`.
-- Examples move to `examples/core/` and `examples/sysml/{adapter,system}/`.
-  Tests split into `tests/core/` and the `sysml`-marked `tests/sysml/`; the
-  default gate is `pytest -m "not sysml"`.
-- The adapter example inherits the shared `FmuInterop` base and
-  `InteropDeployment` port instead of declaring them locally; it is now a
-  direct FMU (`modelName="ActuatorLink"`).
-- Native sources live under `src/`: `runtime/` is `src/runtime/`, `transport/`
-  is `src/transport/`, and the vendored FMI headers are `3rd_party/fmi2/`
-  instead of `third_party/`. CMake, `setup.py`, the sdist manifest, and the
-  Python path resolution follow the new layout.
+- The `sysml/` subpackage, the `psysml2` compatibility module, and the
+  `definitions` facade (`interop_definitions`, `load_with_interop`).
+- The private compatibility re-exports on `core.adapter` and the
+  `DefaultExperiment` regex helper.
 
 ### Fixed
 
+- Fixed-causality parameters stay writable until initialization ends, matching
+  the FMI 2.0 state machine.
 - The invalid `Topic :: Scientific/Engineering :: Simulation` classifier no
   longer blocks metadata generation; the valid parent classifier is used.
 

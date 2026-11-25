@@ -31,7 +31,7 @@ classifiers = [
   "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    "pyfmi-interfaces>=0.5.1",
+    "pyfmi-interfaces @ https://github.com/pyssporg/pyfmi_interfaces/releases/download/v0.5.3/pyfmi_interfaces-0.5.3-py3-none-any.whl",
 ]
 
 [project.optional-dependencies]

@@ -72,7 +72,7 @@ from .wire import (
     model_id,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 _LAZY_MODULES = {
     "timing": ".timing",
